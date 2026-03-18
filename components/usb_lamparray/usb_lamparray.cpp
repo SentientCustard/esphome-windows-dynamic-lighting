@@ -5,7 +5,7 @@
 #include <cmath>
 
 // TinyUSB includes (available via ESPHome's framework = esp-idf)
-#include "esp_tinyusb.h"
+#include "tinyusb.h"
 #include "tusb.h"
 #include "class/hid/hid_device.h"
 
