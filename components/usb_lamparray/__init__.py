@@ -73,7 +73,7 @@ async def to_code(config):
 
     # Resolve the light reference to its underlying AddressableLight
     light_var = await cg.get_variable(config[CONF_LIGHT_ID])
-    cg.add(var.set_light(light_var.get_output()))
+    cg.add(var.set_light(light_var))
 
     cg.add(var.set_vendor_id(config[CONF_VENDOR_ID]))
     cg.add(var.set_product_id(config[CONF_PRODUCT_ID]))
