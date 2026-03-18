@@ -5,7 +5,6 @@
 #include "esphome/components/light/addressable_light.h"
 #include "hid_lamparray_types.h"
 
-#include "esp_err.h"
 #include "tinyusb.h"
 #include "class/hid/hid_device.h"
 
