@@ -9,7 +9,7 @@ import esphome.config_validation as cv
 from esphome.components import light
 from esphome.const import CONF_ID
 
-DEPENDENCIES = ["esp32"]
+DEPENDENCIES = ["esp32", "tinyusb"]
 AUTO_LOAD = []
 CODEOWNERS = ["@you"]
 
