@@ -89,10 +89,3 @@ async def to_code(config):
     cg.add_build_flag("-DCFG_TUD_HID_EP_BUFSIZE=64")
     cg.add_build_flag("-DCFG_TUD_ENDPOINT0_SIZE=64")
     cg.add_build_flag("-DCFG_TUSB_OS=OPT_OS_FREERTOS")
-    cg.add_platformio_option(
-        "build_flags",
-        [
-            "-I$PROJECT_PACKAGES_DIR/framework-espidf/components/tinyusb/src",
-            "-I$PROJECT_PACKAGES_DIR/framework-espidf/components/tinyusb/additions/include",
-        ]
-    )
