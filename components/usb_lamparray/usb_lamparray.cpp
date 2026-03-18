@@ -294,37 +294,9 @@ static const uint8_t LAMP_ARRAY_DESCRIPTOR[] = {
 // TinyUSB HID descriptor and string tables
 // ============================================================================
 
-// Device descriptor — presented to Windows when the USB device enumerates
-static tusb_desc_device_t s_device_descriptor = {
-  .bLength            = sizeof(tusb_desc_device_t),
-  .bDescriptorType    = TUSB_DESC_DEVICE,
-  .bcdUSB             = 0x0200,          // USB 2.0
-  .bDeviceClass       = 0x00,            // Defined at interface level
-  .bDeviceSubClass    = 0x00,
-  .bDeviceProtocol    = 0x00,
-  .bMaxPacketSize0    = CFG_TUD_ENDPOINT0_SIZE,
-  .idVendor           = 0x303A,          // filled in setup()
-  .idProduct          = 0x4004,          // filled in setup()
-  .bcdDevice          = 0x0100,
-  .iManufacturer      = 0x01,
-  .iProduct           = 0x02,
-  .iSerialNumber      = 0x03,
-  .bNumConfigurations = 0x01,
-};
-
 // HID interface + endpoint descriptor (full-speed, interrupt)
 #define CONFIG_TOTAL_LEN  (TUD_CONFIG_DESC_LEN + TUD_HID_DESC_LEN)
 #define EPNUM_HID  0x81  // EP1 IN
-
-static uint8_t s_config_descriptor[] = {
-  // Config descriptor
-  TUD_CONFIG_DESCRIPTOR(1, 1, 0, CONFIG_TOTAL_LEN, TUSB_DESC_CONFIG_ATT_REMOTE_WAKEUP, 100),
-  // HID Interface descriptor
-  TUD_HID_DESCRIPTOR(0, 0, HID_ITF_PROTOCOL_NONE, sizeof(LAMP_ARRAY_DESCRIPTOR), EPNUM_HID, CFG_TUD_HID_EP_BUFSIZE, 10),
-};
-
-// String descriptor table
-static const char *s_string_descriptor[5];
 
 // ============================================================================
 // TinyUSB C-linkage callbacks
