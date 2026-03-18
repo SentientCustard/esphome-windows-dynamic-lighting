@@ -67,9 +67,9 @@ CONFIG_SCHEMA = cv.Schema(
 async def to_code(config):
 
     # Tell ESPHome's tinyusb component we need a HID interface
-    from esphome.components import tinyusb as tinyusb_comp
-    tinyusb_comp.add_idf_sdkconfig_option("CONFIG_TINYUSB_HID_ENABLED", True)
-    tinyusb_comp.add_idf_sdkconfig_option("CONFIG_TINYUSB_HID_COUNT", 1)
+    # from esphome.components import tinyusb as tinyusb_comp
+    # tinyusb_comp.add_idf_sdkconfig_option("CONFIG_TINYUSB_HID_ENABLED", True)
+    # tinyusb_comp.add_idf_sdkconfig_option("CONFIG_TINYUSB_HID_COUNT", 1)
     
     var = cg.new_Pvariable(config[CONF_ID])
     await cg.register_component(var, config)
