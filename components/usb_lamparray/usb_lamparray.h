@@ -28,7 +28,9 @@ class USBLampArrayComponent : public Component {
   // ---- Configuration setters (called from __init__.py generated code) ----
   void set_num_lamps(uint16_t count)             { this->num_lamps_ = count; }
   void set_lamp_array_kind(uint32_t kind)        { this->lamp_array_kind_ = kind; }
-  void set_light(light::AddressableLight *light) { this->light_ = light; }
+  void set_light(light::LightState *state) {
+    this->light_ = static_cast<light::AddressableLight *>(state->get_output());
+  }
   void set_vendor_id(uint16_t vid)               { this->vendor_id_ = vid; }
   void set_product_id(uint16_t pid)              { this->product_id_ = pid; }
   void set_manufacturer(const char *s)           { this->manufacturer_ = s; }
