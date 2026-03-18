@@ -364,55 +364,20 @@ void tud_hid_report_complete_cb(uint8_t instance, const uint8_t *report, uint16_
 void USBLampArrayComponent::setup() {
   ESP_LOGCONFIG(TAG, "Setting up USB LampArray...");
   ESP_LOGCONFIG(TAG, "  Lamps: %d", this->num_lamps_);
-  ESP_LOGCONFIG(TAG, "  Kind:  0x%02X", (unsigned)this->lamp_array_kind_);
 
   instance_ = this;
 
-  // Clamp to maximum
   if (this->num_lamps_ > USB_LAMPARRAY_MAX_LAMPS) {
     ESP_LOGW(TAG, "num_lamps clamped to %d", USB_LAMPARRAY_MAX_LAMPS);
     this->num_lamps_ = USB_LAMPARRAY_MAX_LAMPS;
   }
 
-  // Initialise all lamp states to off
-  memset(this->lamp_states_,  0, sizeof(LampState) * this->num_lamps_);
+  memset(this->lamp_states_,   0, sizeof(LampState) * this->num_lamps_);
   memset(this->pending_states_, 0, sizeof(LampState) * this->num_lamps_);
 
-  // Build the per-lamp attribute table
   this->build_lamp_attributes_();
 
-  // Fill in configurable fields in the device descriptor
-  s_device_descriptor.idVendor  = this->vendor_id_;
-  s_device_descriptor.idProduct = this->product_id_;
-
-  // String table (index 0 = language, 1 = manufacturer, 2 = product, 3 = serial)
-  static char serial_buf[16];
-  
-  uint8_t mac[6];
-  esp_efuse_mac_get_default(mac);
-  snprintf(serial_buf, sizeof(serial_buf), "%02X%02X%02X%02X", mac[0], mac[1], mac[2], mac[3]);
-  s_string_descriptor[0] = (char[]){0x09, 0x04};  // English (US)
-  s_string_descriptor[1] = this->manufacturer_;
-  s_string_descriptor[2] = this->product_;
-  s_string_descriptor[3] = serial_buf;
-  s_string_descriptor[4] = nullptr;
-
-  // Install TinyUSB driver
-  tinyusb_config_t tusb_cfg = {
-    .device_descriptor        = &s_device_descriptor,
-    .string_descriptor        = s_string_descriptor,
-    .string_descriptor_count  = 4,
-    .external_phy             = false,
-    .configuration_descriptor = s_config_descriptor,
-  };
-  esp_err_t err = tinyusb_driver_install(&tusb_cfg);
-  if (err != ESP_OK) {
-    ESP_LOGE(TAG, "TinyUSB install failed: %s", esp_err_to_name(err));
-    this->mark_failed();
-    return;
-  }
-
-  ESP_LOGI(TAG, "USB LampArray ready — waiting for Windows to enumerate");
+  ESP_LOGI(TAG, "USB LampArray callbacks registered");
 }
 
 void USBLampArrayComponent::loop() {
