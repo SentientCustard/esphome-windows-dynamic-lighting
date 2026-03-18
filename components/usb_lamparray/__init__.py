@@ -83,8 +83,16 @@ async def to_code(config):
     r, g, b = config[CONF_AUTONOMOUS_COLOR]
     cg.add(var.set_autonomous_mode_color(r, g, b))
 
-    # Required sdkconfig flags for TinyUSB HID on ESP32-S3
+    # TinyUSB include paths — point directly into the PlatformIO ESP-IDF package
     cg.add_build_flag("-DCFG_TUSB_MCU=OPT_MCU_ESP32S3")
     cg.add_build_flag("-DCFG_TUD_HID=1")
     cg.add_build_flag("-DCFG_TUD_HID_EP_BUFSIZE=64")
     cg.add_build_flag("-DCFG_TUD_ENDPOINT0_SIZE=64")
+    cg.add_build_flag("-DCFG_TUSB_OS=OPT_OS_FREERTOS")
+    cg.add_platformio_option(
+        "build_flags",
+        [
+            "-I$PROJECT_PACKAGES_DIR/framework-espidf/components/tinyusb/src",
+            "-I$PROJECT_PACKAGES_DIR/framework-espidf/components/tinyusb/additions/include",
+        ]
+    )
