@@ -438,7 +438,7 @@ void USBLampArrayComponent::loop() {
 void USBLampArrayComponent::flush_to_light_() {
   auto &leds = *this->light_;
   for (int i = 0; i < this->num_lamps_ && i < leds.size(); i++) {
-    leds[i] = light::ESPColor(
+    leds[i] = Color(
       this->lamp_states_[i].red,
       this->lamp_states_[i].green,
       this->lamp_states_[i].blue
