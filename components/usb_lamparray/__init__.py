@@ -68,6 +68,8 @@ async def to_code(config):
     var = cg.new_Pvariable(config[CONF_ID])
     await cg.register_component(var, config)
 
+    # Add ESP-IDF TinyUSB component include path
+    cg.add_platformio_option("lib_deps", ["idf::tinyusb"])
     cg.add(var.set_num_lamps(config[CONF_NUM_LAMPS]))
     cg.add(var.set_lamp_array_kind(LAMP_ARRAY_KINDS[config[CONF_LAMP_ARRAY_KIND]]))
 
@@ -88,3 +90,4 @@ async def to_code(config):
     cg.add_build_flag("-DCFG_TUD_HID=1")
     cg.add_build_flag("-DCFG_TUD_HID_EP_BUFSIZE=64")
     cg.add_build_flag("-DCFG_TUD_ENDPOINT0_SIZE=64")
+    cg.add_build_flag("-DCFG_TUSB_OS=OPT_OS_FREERTOS")
