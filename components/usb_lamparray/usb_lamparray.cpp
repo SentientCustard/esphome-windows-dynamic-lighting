@@ -5,9 +5,9 @@
 #include <cmath>
 
 // TinyUSB includes (available via ESPHome's framework = esp-idf)
-#include "tinyusb.h"
-#include "tusb.h"
-#include "class/hid/hid_device.h"
+//#include "tinyusb.h"
+//#include "tusb.h"
+//#include "class/hid/hid_device.h"
 
 static const char *const TAG = "usb_lamparray";
 
