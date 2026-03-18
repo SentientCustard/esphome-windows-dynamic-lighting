@@ -3,6 +3,7 @@
 #include "esphome/core/application.h"
 #include <cstring>
 #include <cmath>
+#include "esp_efuse.h"
 
 // TinyUSB includes (available via ESPHome's framework = esp-idf)
 //#include "tinyusb.h"
@@ -417,16 +418,16 @@ void USBLampArrayComponent::setup() {
 void USBLampArrayComponent::loop() {
   // If in autonomous mode, push the autonomous colour on first entry
   if (this->autonomous_mode_) {
-    static bool autonomous_pushed = false;
-    if (!autonomous_pushed) {
+    static bool autonomous_pushed_ = false;
+    if (!autonomous_pushed_) {
       for (int i = 0; i < this->num_lamps_; i++) {
         this->lamp_states_[i] = {this->autonomous_r_, this->autonomous_g_, this->autonomous_b_};
       }
-      autonomous_pushed = true;
+      autonomous_pushed_ = true;
       this->dirty_ = true;
     }
   } else {
-    autonomous_pushed = false;  // reset flag so next autonomous entry re-pushes
+    autonomous_pushed_ = false;  // reset flag so next autonomous entry re-pushes
   }
 
   if (this->dirty_ && this->light_) {
