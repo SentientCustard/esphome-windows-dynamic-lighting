@@ -6,7 +6,6 @@
 #include "hid_lamparray_types.h"
 
 #include "esp_err.h"
-#include "esp_tinyusb.h"
 #include "tusb.h"
 #include "class/hid/hid_device.h"
 
