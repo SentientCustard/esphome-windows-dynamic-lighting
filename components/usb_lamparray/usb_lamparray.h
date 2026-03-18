@@ -50,6 +50,8 @@ class USBLampArrayComponent : public Component {
   // Build per-lamp position/attribute data based on lamp count
   void build_lamp_attributes_();
 
+  bool autonomous_pushed_{false};
+
   // Push current lamp_states_ to the ESPHome light component
   void flush_to_light_();
 
