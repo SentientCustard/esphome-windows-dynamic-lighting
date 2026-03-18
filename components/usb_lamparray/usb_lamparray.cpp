@@ -3,7 +3,7 @@
 #include "esphome/core/application.h"
 #include <cstring>
 #include <cmath>
-#include "esp_efuse.h"
+#include "esp_mac.h"
 
 // TinyUSB includes (available via ESPHome's framework = esp-idf)
 //#include "tinyusb.h"
