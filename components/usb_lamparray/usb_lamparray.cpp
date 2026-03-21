@@ -497,9 +497,10 @@ void USBLampArrayComponent::build_lamp_attributes_() {
 // ============================================================================
 // HID GET_REPORT handler
 //
-// For HID Feature reports, the buffer must contain the FULL report including
-// the report_id byte at position 0. TinyUSB does NOT prepend it for Feature
-// reports — that only applies to Input reports sent via tud_hid_report().
+// TinyUSB prepends the report_id byte into the transfer buffer BEFORE calling
+// us (hid_device.c lines 312-313), then passes us the buffer pointer already
+// advanced by 1. So we must NOT include report_id in what we copy — just the
+// payload fields after it. Return the number of payload bytes written.
 // ============================================================================
 uint16_t USBLampArrayComponent::on_get_report(uint8_t report_id,
                                                uint8_t *buffer,
@@ -514,9 +515,12 @@ uint16_t USBLampArrayComponent::on_get_report(uint8_t report_id,
       r.bounding_box_depth  = 10000;
       r.lamp_array_kind     = this->lamp_array_kind_;
       r.min_update_interval = 0;
-      uint16_t len = (uint16_t)sizeof(r);
-      if (len > req_len) len = req_len;
-      memcpy(buffer, &r, len);
+      // Copy everything AFTER report_id (TinyUSB already wrote that byte)
+      // req_len includes the report_id byte TinyUSB consumed, so available
+      // space for our payload is req_len - 1
+      uint16_t len = (uint16_t)(sizeof(r) - 1);
+      if (len > req_len - 1) len = req_len - 1;
+      memcpy(buffer, &r.lamp_count, len);
       return len;
     }
 
@@ -524,11 +528,11 @@ uint16_t USBLampArrayComponent::on_get_report(uint8_t report_id,
       uint16_t id = this->requested_lamp_id_;
       if (id >= this->num_lamps_) id = 0;
       LampAttributesResponseReport &a = this->lamp_attrs_[id];
-      uint16_t len = (uint16_t)sizeof(a);
-      if (len > req_len) len = req_len;
-      memcpy(buffer, &a, len);
-      // Auto-advance to next lamp — Windows may rely on this rather than
-      // always sending a new LampAttributesRequestReport for each lamp
+      // Copy everything AFTER report_id
+      uint16_t len = (uint16_t)(sizeof(a) - 1);
+      if (len > req_len - 1) len = req_len - 1;
+      memcpy(buffer, &a.lamp_id, len);
+      // Auto-advance to next lamp
       this->requested_lamp_id_ = (id + 1) % this->num_lamps_;
       return len;
     }
