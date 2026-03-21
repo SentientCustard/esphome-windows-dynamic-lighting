@@ -191,6 +191,13 @@ static const uint8_t LAMP_ARRAY_DESCRIPTOR[] = {
     0x95, 0x08,
     0x91, 0x02,
     // 8x Red, 8x Green, 8x Blue, 8x Intensity
+    // Declare Logical Min/Max BEFORE the usages — otherwise they inherit
+    // the 0-65535 range from the LampId fields above, which is a parse
+    // error when Report Size is 8 (65535 doesn't fit in 8 bits).
+    0x15, 0x00,                           // Logical Minimum (0)
+    0x26, 0xFF, 0x00,                     // Logical Maximum (255)
+    0x75, 0x08,                           // Report Size (8)
+    0x95, 0x20,                           // Report Count (32 = 8 lamps × 4 channels)
     0x09, HID_USAGE_RED_UPDATE,
     0x09, HID_USAGE_RED_UPDATE,
     0x09, HID_USAGE_RED_UPDATE,
@@ -223,10 +230,6 @@ static const uint8_t LAMP_ARRAY_DESCRIPTOR[] = {
     0x09, HID_USAGE_INTENSITY_UPDATE,
     0x09, HID_USAGE_INTENSITY_UPDATE,
     0x09, HID_USAGE_INTENSITY_UPDATE,
-    0x15, 0x00,
-    0x26, 0xFF, 0x00,
-    0x75, 0x08,
-    0x95, 0x20,                           // 32 fields (8 lamps × 4 channels)
     0x91, 0x02,
 
   // -- Report 0x05: LampRangeUpdateReport (Output, host → device) --
