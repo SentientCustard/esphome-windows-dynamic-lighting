@@ -20,7 +20,7 @@ from esphome.const import CONF_ID
 # We call tinyusb_driver_install() ourselves in setup() using the correct
 # flat-field API. The esp_tinyusb headers are available directly from the
 # ESP-IDF managed component without needing ESPHome's wrapper.
-DEPENDENCIES = ["esp32"]
+DEPENDENCIES = ["esp32", "tinyusb"]
 AUTO_LOAD   = []
 CODEOWNERS  = ["@SentientCustard"]
 
@@ -77,6 +77,17 @@ CONFIG_SCHEMA = cv.Schema(
 async def to_code(config):
     var = cg.new_Pvariable(config[CONF_ID])
     await cg.register_component(var, config)
+
+    # We need ESPHome's `tinyusb:` component present in the YAML solely to
+    # put the esp_tinyusb headers on the include path. Our component calls
+    # tinyusb_driver_install() first (higher setup priority) with the correct
+    # HID config. When ESPHome's tinyusb component then calls it, it gets
+    # ESP_ERR_INVALID_STATE (driver already installed) and marks itself failed
+    # — which is harmless as long as descriptors_control.c does not wipe our
+    # descriptors before failing.
+    # The ESP_ERR_INVALID_STATE path in tinyusb_driver_install returns before
+    # calling tinyusb_set_descriptors, so our s_desc_cfg stays intact.
+    cg.add_define("USE_TINYUSB")
 
     cg.add(var.set_num_lamps(config[CONF_NUM_LAMPS]))
     cg.add(var.set_lamp_array_kind(LAMP_ARRAY_KINDS[config[CONF_LAMP_ARRAY_KIND]]))
