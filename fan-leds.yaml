@@ -13,8 +13,9 @@
 # ============================================================================
 
 esphome:
-  name: fan-leds
-  friendly_name: "PC Fan LEDs"
+  name: "esphome-s3-40"
+  friendly_name: ESPHome PC Fan LEDs
+  name_add_mac_suffix: false
   # Needed so TinyUSB USB OTG is used instead of the Serial/JTAG peripheral
   platformio_options:
     board_build.usb_mode: 1  # 1 = TinyUSB (OTG), 0 = Serial/JTAG
@@ -37,11 +38,26 @@ esp32:
       CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG: "n"
       CONFIG_ESP_CONSOLE_UART_DEFAULT: "y"
 
+# Time component for Home Assistant
+time:
+  - platform: homeassistant
+    id: homeassistant_time
+
+# Enable logging
 logger:
   # Use hardware UART for logs (GPIO43=TX, GPIO44=RX on S3-Zero)
   # This frees up USB for HID — connect a USB-UART adapter if you need logs
   hardware_uart: UART0
   baud_rate: 115200
+
+# Enable Home Assistant API
+api:
+  encryption:
+    key: !secret api_encryption_key
+
+# Allow Over-The-Air updates
+ota:
+- platform: esphome
 
 wifi:
   ssid: !secret wifi_ssid
@@ -50,47 +66,66 @@ wifi:
     ssid: "Fan-Leds Fallback"
     password: "fanledsfallback"
 
-ota:
-  platform: esphome
-  password: !secret ota_password
-
-api:
-  password: !secret api_password
-
-# ---- External component (point this at your local clone or GitHub fork) ----
-external_components:
-  - source:
-      type: local
-      path: components   # use this if you cloned the repo locally
-      # OR use GitHub after you push:
-      # type: git
-      # url: https://github.com/YOUR_USERNAME/esphome-usb-lamparray
-      # ref: main
-    components: [usb_lamparray]
-
-# ---- Your LED strip ----
 light:
-  - platform: neopixelbus
+  - platform: esp32_rmt_led_strip
+    id: onboardLED
+    name: "Onboard LED"
+    num_leds: 1
+    rgb_order: GRB
+    pin: 21
+    chipset: WS2812
+    restore_mode: RESTORE_DEFAULT_ON
+    default_transition_length: 0s
+    gamma_correct: 1.5
+  - platform: esp32_rmt_led_strip
     id: fan_leds
     name: "PC Fan LEDs"
-    type: GRB           # WS2812B is GRB — double-check your specific strip
-    variant: WS2812X
-    pin: GPIO2          # Change to whichever GPIO you use for the data wire
-    num_leds: 16        # Total LEDs across all fans (3 fans × ~5 LEDs = 15 etc.)
-    # Disable ESPHome's own power-on effect so the LampArray component controls colour
-    effects: []
+    rgb_order: GRB
+    pin: GPIO2
+    num_leds: 16
+    chipset: WS2812
     restore_mode: ALWAYS_OFF
+    default_transition_length: 0s
+    gamma_correct: 1.5
+
+sensor:
+  - platform: wifi_signal
+    name: "WiFi Signal Strength"
+    id: wifi_signal_db
+    update_interval: 5s
+
+tinyusb:
+  usb_product_id: 0x4004
+  usb_manufacturer_str: "ESPHome"
+  usb_product_str: "PC Fan LampArray"
+#  hid: true
+
+# ---- External component ----
+external_components:
+  - source:
+      type: git
+      url: https://github.com/SentientCustard/esphome-windows-dynamic-lighting/
+      ref: 04878b5
+    components: [usb_lamparray]
 
 # ---- USB HID LampArray ----
 usb_lamparray:
-  num_lamps: 16               # Must match light.num_leds above
-  lamp_array_kind: peripheral # Options: keyboard, mouse, peripheral, chassis, etc.
-  light_id: fan_leds
+  num_lamps: 1
+  lamp_array_kind: peripheral
+  light_id: onboardLED
   manufacturer: "ESPHome"
   product: "PC Fan LampArray"
+  autonomous_mode_color: [0, 255, 0]  # bright green
+
+
+#  num_lamps: 16               # Must match light.num_leds above
+#  lamp_array_kind: peripheral # Options: keyboard, mouse, peripheral, chassis, etc.
+#  light_id: fan_leds
+#  manufacturer: "ESPHome"
+#  product: "PC Fan LampArray"
   # Colour shown when no Windows app is actively controlling the device
   # [R, G, B] — this faint blue is a nice "idle" colour
-  autonomous_mode_color: [0, 0, 20]
+#  autonomous_mode_color: [0, 0, 20]
   # Optional: change USB VID/PID if you have multiple devices
   # vendor_id: 0x303A
   # product_id: 0x4004
