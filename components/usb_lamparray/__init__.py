@@ -14,9 +14,13 @@ import esphome.config_validation as cv
 from esphome.components import light
 from esphome.const import CONF_ID
 
-# "tinyusb" intentionally omitted — we own the descriptor callbacks ourselves.
-# The ESP-IDF TinyUSB stack is still present via sdkconfig_options in the YAML.
-DEPENDENCIES = ["esp32"]
+# "tinyusb" must stay here — it pulls in tinyusb.h, tusb.h, hid_device.h and
+# the Kconfig/sdkconfig options needed to compile.
+# We call tinyusb_driver_install() ourselves in setup() before ESPHome's
+# tinyusb component gets a chance to, passing our custom HID descriptors.
+# If ESPHome's component then also tries to call tinyusb_driver_install() it
+# will get ESP_ERR_INVALID_STATE (already installed) which is harmless.
+DEPENDENCIES = ["esp32", "tinyusb"]
 AUTO_LOAD   = []
 CODEOWNERS  = ["@SentientCustard"]
 
