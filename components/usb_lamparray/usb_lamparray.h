@@ -1,89 +1,94 @@
 #pragma once
 
 #include "esphome/core/component.h"
-#include "esphome/core/hal.h"
 #include "esphome/components/light/addressable_light.h"
 #include "hid_lamparray_types.h"
-
-#include "tinyusb.h"
-#include "class/hid/hid_device.h"
+#include <string>
 
 namespace esphome {
 namespace usb_lamparray {
 
-// Maximum lamps this component supports
-#define USB_LAMPARRAY_MAX_LAMPS 256
+// Maximum lamps supported (Windows Dynamic Lighting limit is 256)
+static constexpr uint16_t USB_LAMPARRAY_MAX_LAMPS = 256;
 
-// LampUpdateComplete flag in multi/range update reports
-#define LAMP_UPDATE_FLAG_COMPLETE 0x01
-
+// ============================================================================
+// USBLampArrayComponent
+//
+// Implements a USB HID LampArray device using TinyUSB on the ESP32-S3.
+// All TinyUSB descriptor callbacks are in usb_lamparray.cpp (extern "C").
+// This class owns:
+//   - The lamp attribute table (positions, capabilities)
+//   - The current and pending lamp colour state
+//   - Flushing colour state to the ESPHome addressable light
+// ============================================================================
 class USBLampArrayComponent : public Component {
  public:
-  // ---- ESPHome lifecycle ----
+  // ── ESPHome Component lifecycle ─────────────────────────────────────────
   void setup() override;
   void loop() override;
-  //float get_setup_priority() const override { return setup_priority::HARDWARE; }
-  float get_setup_priority() const override { return esphome::setup_priority::HARDWARE; }
-  // ---- Configuration setters (called from __init__.py generated code) ----
-  void set_num_lamps(uint16_t count)             { this->num_lamps_ = count; }
-  void set_lamp_array_kind(uint32_t kind)        { this->lamp_array_kind_ = kind; }
-  void set_light(light::LightState *state) {
-    this->light_ = static_cast<light::AddressableLight *>(state->get_output());
-  }
-  void set_vendor_id(uint16_t vid)               { this->vendor_id_ = vid; }
-  void set_product_id(uint16_t pid)              { this->product_id_ = pid; }
-  void set_manufacturer(const char *s)           { this->manufacturer_ = s; }
-  void set_product(const char *s)                { this->product_ = s; }
+  float get_setup_priority() const override { return setup_priority::BUS; }
+
+  // ── Singleton access (used by TinyUSB C callbacks) ───────────────────────
+  static USBLampArrayComponent *instance() { return instance_; }
+
+  // ── YAML setters (called from __init__.py generated code) ────────────────
+  void set_num_lamps(uint16_t n)           { num_lamps_ = n; }
+  void set_lamp_array_kind(uint32_t kind)  { lamp_array_kind_ = kind; }
+  void set_light(light::AddressableLight *l) { light_ = l; }
+  void set_vendor_id(uint16_t vid)         { vendor_id_ = vid; }
+  void set_product_id(uint16_t pid)        { product_id_ = pid; }
+  void set_manufacturer(const char *s)     { manufacturer_ = s; }
+  void set_product(const char *s)          { product_ = s; }
   void set_autonomous_mode_color(uint8_t r, uint8_t g, uint8_t b) {
-    this->autonomous_r_ = r;
-    this->autonomous_g_ = g;
-    this->autonomous_b_ = b;
+    autonomous_r_ = r;
+    autonomous_g_ = g;
+    autonomous_b_ = b;
   }
 
-  // ---- TinyUSB HID callbacks (called from C shim, must be public) ----
+  // ── Getters used by TinyUSB string descriptor callback ──────────────────
+  const char *get_manufacturer() const { return manufacturer_.c_str(); }
+  const char *get_product()      const { return product_.c_str(); }
+
+  // ── HID report handlers (called from extern "C" TinyUSB callbacks) ───────
   uint16_t on_get_report(uint8_t report_id, uint8_t *buffer, uint16_t req_len);
   void     on_set_report(uint8_t report_id, const uint8_t *buffer, uint16_t buf_len);
 
-  // Singleton accessor (needed for C-linkage TinyUSB callbacks)
-  static USBLampArrayComponent *instance() { return instance_; }
-
  protected:
-  // Build per-lamp position/attribute data based on lamp count
+  // ── Internal helpers ─────────────────────────────────────────────────────
   void build_lamp_attributes_();
-
-  bool autonomous_pushed_{false};
-
-  // Push current lamp_states_ to the ESPHome light component
   void flush_to_light_();
 
-  // Configuration
-  uint16_t     num_lamps_{16};
-  uint32_t     lamp_array_kind_{LAMP_ARRAY_KIND_PERIPHERAL};
-  light::AddressableLight *light_{nullptr};
-  uint16_t     vendor_id_{0x303A};   // Espressif default VID
-  uint16_t     product_id_{0x4004};  // arbitrary HID PID
-  const char  *manufacturer_{"ESPHome"};
-  const char  *product_{"USB LampArray"};
+  // ── Singleton ────────────────────────────────────────────────────────────
+  static USBLampArrayComponent *instance_;
 
-  // Autonomous mode fallback colour (shown when no app is controlling)
-  uint8_t autonomous_r_{0};
-  uint8_t autonomous_g_{0};
-  uint8_t autonomous_b_{20};  // dim blue default
+  // ── Configuration ────────────────────────────────────────────────────────
+  uint16_t num_lamps_       = 1;
+  uint32_t lamp_array_kind_ = 0x04;   // peripheral
+  uint16_t vendor_id_       = 0x303A;
+  uint16_t product_id_      = 0x4004;
+  std::string manufacturer_ = "ESPHome";
+  std::string product_      = "USB LampArray";
 
-  // Runtime state
-  bool        autonomous_mode_{true};
-  bool        dirty_{false};          // true when lamp_states_ has unwritten changes
-  uint16_t    requested_lamp_id_{0};  // tracks GET_REPORT(LampAttributesResponse) cursor
-  LampState   lamp_states_[USB_LAMPARRAY_MAX_LAMPS]{};
+  // Colour shown when no Windows app is controlling the device
+  uint8_t autonomous_r_ = 0;
+  uint8_t autonomous_g_ = 0;
+  uint8_t autonomous_b_ = 20;
 
-  // Pending buffered colours (we only flush when LampUpdateComplete flag is set)
-  LampState   pending_states_[USB_LAMPARRAY_MAX_LAMPS]{};
-  bool        has_pending_{false};
+  // ── Runtime state ────────────────────────────────────────────────────────
+  light::AddressableLight *light_ = nullptr;
 
-  // Per-lamp attribute table (positions computed from lamp count in a circle)
+  // Lamp attribute table — built once in setup()
   LampAttributesResponseReport lamp_attrs_[USB_LAMPARRAY_MAX_LAMPS]{};
 
-  static USBLampArrayComponent *instance_;
+  // Committed colours (shown on LEDs) and buffered-but-not-yet-committed
+  struct LampState { uint8_t red, green, blue; };
+  LampState lamp_states_[USB_LAMPARRAY_MAX_LAMPS]{};
+  LampState pending_states_[USB_LAMPARRAY_MAX_LAMPS]{};
+
+  uint16_t requested_lamp_id_ = 0;   // lamp whose attrs were last requested
+  bool     autonomous_mode_   = true; // true = device controls its own LEDs
+  bool     dirty_             = false;
+  bool     has_pending_       = false;
 };
 
 }  // namespace usb_lamparray
