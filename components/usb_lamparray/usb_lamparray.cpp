@@ -156,7 +156,7 @@ static const uint8_t LAMP_ARRAY_DESCRIPTOR[] = {
     0x95, 0x06,
     0xB1, 0x03,
 
-  // -- Report 0x04: LampMultiUpdateReport (Output, host → device) --
+  // -- Report 0x04: LampMultiUpdateReport (Feature, host → device) --
   0x85, REPORT_ID_LAMP_MULTI_UPDATE_REPORT,
     // LampCount: uint8
     0x09, HID_USAGE_LAMP_COUNT,
@@ -164,18 +164,18 @@ static const uint8_t LAMP_ARRAY_DESCRIPTOR[] = {
     0x25, 0x08,
     0x75, 0x08,
     0x95, 0x01,
-    0x91, 0x02,
+    0xB1, 0x02,
     // LampUpdateFlags: uint8
     0x09, HID_USAGE_LAMP_UPDATE_FLAGS,
     0x15, 0x00,
     0x25, 0xFF,
     0x75, 0x08,
     0x95, 0x01,
-    0x91, 0x02,
+    0xB1, 0x02,
     // Reserved: uint8
     0x75, 0x08,
     0x95, 0x01,
-    0x91, 0x03,
+    0xB1, 0x03,
     // 8x LampId: uint16 each
     0x09, HID_USAGE_LAMP_ID,
     0x09, HID_USAGE_LAMP_ID,
@@ -189,7 +189,7 @@ static const uint8_t LAMP_ARRAY_DESCRIPTOR[] = {
     0x27, 0xFF, 0xFF, 0x00, 0x00,
     0x75, 0x10,
     0x95, 0x08,
-    0x91, 0x02,
+    0xB1, 0x02,
     // 8x Red, 8x Green, 8x Blue, 8x Intensity
     // Declare Logical Min/Max BEFORE the usages — otherwise they inherit
     // the 0-65535 range from the LampId fields above, which is a parse
@@ -230,9 +230,9 @@ static const uint8_t LAMP_ARRAY_DESCRIPTOR[] = {
     0x09, HID_USAGE_INTENSITY_UPDATE,
     0x09, HID_USAGE_INTENSITY_UPDATE,
     0x09, HID_USAGE_INTENSITY_UPDATE,
-    0x91, 0x02,
+    0xB1, 0x02,
 
-  // -- Report 0x05: LampRangeUpdateReport (Output, host → device) --
+  // -- Report 0x05: LampRangeUpdateReport (Feature, host → device) --
   0x85, REPORT_ID_LAMP_RANGE_UPDATE_REPORT,
     // LampUpdateFlags: uint8
     0x09, HID_USAGE_LAMP_UPDATE_FLAGS,
@@ -240,11 +240,11 @@ static const uint8_t LAMP_ARRAY_DESCRIPTOR[] = {
     0x25, 0xFF,
     0x75, 0x08,
     0x95, 0x01,
-    0x91, 0x02,
+    0xB1, 0x02,
     // Reserved: 2 bytes
     0x75, 0x08,
     0x95, 0x02,
-    0x91, 0x03,
+    0xB1, 0x03,
     // LampIdStart, LampIdEnd: uint16 each
     0x09, HID_USAGE_LAMP_ID_START,
     0x09, HID_USAGE_LAMP_ID_END,
@@ -252,7 +252,7 @@ static const uint8_t LAMP_ARRAY_DESCRIPTOR[] = {
     0x27, 0xFF, 0xFF, 0x00, 0x00,
     0x75, 0x10,
     0x95, 0x02,
-    0x91, 0x02,
+    0xB1, 0x02,
     // Red, Green, Blue, Intensity: uint8 each
     0x09, HID_USAGE_RED_UPDATE,
     0x09, HID_USAGE_GREEN_UPDATE,
@@ -262,7 +262,7 @@ static const uint8_t LAMP_ARRAY_DESCRIPTOR[] = {
     0x26, 0xFF, 0x00,
     0x75, 0x08,
     0x95, 0x04,
-    0x91, 0x02,
+    0xB1, 0x02,
 
   // -- Report 0x06: LampArrayControlReport (Feature, host → device) --
   0x85, REPORT_ID_LAMP_ARRAY_CONTROL_REPORT,
@@ -517,7 +517,7 @@ uint16_t USBLampArrayComponent::on_get_report(uint8_t report_id,
       r.bounding_box_height = 120000;
       r.bounding_box_depth  = 10000;
       r.lamp_array_kind     = this->lamp_array_kind_;
-      r.min_update_interval = 0;
+      r.min_update_interval = 33333;
       // Copy everything AFTER report_id (TinyUSB already wrote that byte)
       // req_len includes the report_id byte TinyUSB consumed, so available
       // space for our payload is req_len - 1
