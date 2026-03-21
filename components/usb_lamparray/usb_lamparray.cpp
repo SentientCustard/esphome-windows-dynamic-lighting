@@ -496,6 +496,10 @@ void USBLampArrayComponent::build_lamp_attributes_() {
 
 // ============================================================================
 // HID GET_REPORT handler
+//
+// For HID Feature reports, the buffer must contain the FULL report including
+// the report_id byte at position 0. TinyUSB does NOT prepend it for Feature
+// reports — that only applies to Input reports sent via tud_hid_report().
 // ============================================================================
 uint16_t USBLampArrayComponent::on_get_report(uint8_t report_id,
                                                uint8_t *buffer,
@@ -510,9 +514,9 @@ uint16_t USBLampArrayComponent::on_get_report(uint8_t report_id,
       r.bounding_box_depth  = 10000;
       r.lamp_array_kind     = this->lamp_array_kind_;
       r.min_update_interval = 0;
-      // TinyUSB prepends the report_id byte, so exclude it from the copy
-      uint16_t len = (uint16_t)sizeof(r) - 1;
-      memcpy(buffer, &r.lamp_count, len);
+      uint16_t len = (uint16_t)sizeof(r);
+      if (len > req_len) len = req_len;
+      memcpy(buffer, &r, len);
       return len;
     }
 
@@ -520,8 +524,12 @@ uint16_t USBLampArrayComponent::on_get_report(uint8_t report_id,
       uint16_t id = this->requested_lamp_id_;
       if (id >= this->num_lamps_) id = 0;
       LampAttributesResponseReport &a = this->lamp_attrs_[id];
-      uint16_t len = (uint16_t)sizeof(a) - 1;
-      memcpy(buffer, &a.lamp_id, len);
+      uint16_t len = (uint16_t)sizeof(a);
+      if (len > req_len) len = req_len;
+      memcpy(buffer, &a, len);
+      // Auto-advance to next lamp — Windows may rely on this rather than
+      // always sending a new LampAttributesRequestReport for each lamp
+      this->requested_lamp_id_ = (id + 1) % this->num_lamps_;
       return len;
     }
 
