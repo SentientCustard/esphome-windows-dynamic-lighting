@@ -331,22 +331,15 @@ static const char *s_string_table[] = {
 // ============================================================================
 // TinyUSB C-linkage callbacks
 //
-// tud_descriptor_configuration_cb overrides the __weak default in ESP-IDF's
-// descriptors_control.c. The default returns a CDC-only config descriptor;
-// ours returns a HID-only config with the LampArray interface wired in.
-// This is the correct way to supply a custom config descriptor in ESP-IDF 5.x
-// because tinyusb_config_t has no working field for it.
+// NOTE: tud_descriptor_configuration_cb is a STRONG symbol in this version of
+// esp_tinyusb (descriptors_control.c) — we cannot override it here.
+// Instead we pass our config descriptor via tinyusb_driver_install() in
+// setup(). See setup() for the correct tinyusb_config_t field name, which
+// we determine at runtime from descriptors_control.c in the build tree.
 //
-// The HID-level callbacks (get/set report, report complete) are strong symbols
-// that TinyUSB calls once the HID interface is active.
+// The HID-level callbacks below are genuine TinyUSB extension points.
 // ============================================================================
 extern "C" {
-
-// Override weak default — supply our HID config descriptor
-uint8_t const *tud_descriptor_configuration_cb(uint8_t index) {
-  (void)index;
-  return s_config_desc;
-}
 
 uint8_t const *tud_hid_descriptor_report_cb(uint8_t instance) {
   (void)instance;
