@@ -543,32 +543,33 @@ void USBLampArrayComponent::on_set_report(uint8_t report_id,
     }
 
     case REPORT_ID_LAMP_MULTI_UPDATE_REPORT: {
-      if (buf_len < 4) break;
-      uint8_t count = buffer[0];
-      uint8_t flags = buffer[1];
-      // buffer[2] is reserved
-      const uint8_t *data = buffer + 3;
+      // TinyUSB strips the report_id byte before calling us, so buffer maps
+      // directly onto the fields after report_id in LampMultiUpdateReport.
+      // Minimum size: lamp_count(1) + flags(1) + reserved(1) + ids(16) = 19
+      if (buf_len < 19) break;
 
+      // Cast buffer onto the struct layout (packed, so safe)
+      // We offset by -1 because report_id is already consumed by TinyUSB
+      const LampMultiUpdateReport *r =
+        reinterpret_cast<const LampMultiUpdateReport *>(buffer - 1);
+
+      uint8_t count = r->lamp_count;
       if (count > LAMP_MULTI_UPDATE_LAMP_COUNT)
         count = LAMP_MULTI_UPDATE_LAMP_COUNT;
 
-      const uint16_t *ids       = (const uint16_t *)(data);
-      const uint8_t  *reds      = data + 16;  // after 8x uint16 IDs
-      const uint8_t  *greens    = data + 24;
-      const uint8_t  *blues     = data + 32;
-      const uint8_t  *intensities = data + 40;
-
       for (uint8_t i = 0; i < count; i++) {
-        uint16_t id = ids[i];
+        uint16_t id = r->lamp_ids[i];
         if (id >= this->num_lamps_) continue;
-        float scale = (intensities[i] == 255) ? 1.0f : (intensities[i] / 255.0f);
-        this->pending_states_[id].red   = (uint8_t)(reds[i]   * scale);
-        this->pending_states_[id].green = (uint8_t)(greens[i] * scale);
-        this->pending_states_[id].blue  = (uint8_t)(blues[i]  * scale);
+        const LampArrayColor &c = r->lamp_colors[i];
+        // Apply intensity as a brightness multiplier (255 = full, 0 = off)
+        float scale = (c.intensity == 255) ? 1.0f : (c.intensity / 255.0f);
+        this->pending_states_[id].red   = (uint8_t)(c.red   * scale);
+        this->pending_states_[id].green = (uint8_t)(c.green * scale);
+        this->pending_states_[id].blue  = (uint8_t)(c.blue  * scale);
       }
       this->has_pending_ = true;
 
-      if (flags & LAMP_UPDATE_FLAG_COMPLETE) {
+      if (r->lamp_update_flags & LAMP_UPDATE_FLAG_COMPLETE) {
         memcpy(this->lamp_states_, this->pending_states_,
                sizeof(LampState) * this->num_lamps_);
         this->dirty_ = true;
