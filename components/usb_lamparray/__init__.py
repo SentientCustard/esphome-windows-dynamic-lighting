@@ -1,17 +1,24 @@
 """ESPHome external component: USB HID LampArray for Windows Dynamic Lighting.
 
-Targets: ESP32-S3 (requires USB OTG peripheral + TinyUSB)
-Tested on: Waveshare ESP32-S3-Zero
-"""
+Targets : ESP32-S3 (requires USB OTG peripheral + TinyUSB)
+Tested  : Waveshare ESP32-S3-Zero
 
+NOTE: This component owns ALL TinyUSB descriptor callbacks itself
+(tud_descriptor_device_cb, tud_descriptor_configuration_cb,
+tud_descriptor_string_cb).  ESPHome's built-in `tinyusb` component MUST NOT
+appear in fan-leds.yaml and MUST NOT be listed in DEPENDENCIES here — doing
+so causes duplicate-symbol linker errors and the wrong descriptors win.
+"""
 import esphome.codegen as cg
 import esphome.config_validation as cv
 from esphome.components import light
 from esphome.const import CONF_ID
 
-DEPENDENCIES = ["esp32", "tinyusb"]
-AUTO_LOAD = []
-CODEOWNERS = ["@you"]
+# "tinyusb" intentionally omitted — we own the descriptor callbacks ourselves.
+# The ESP-IDF TinyUSB stack is still present via sdkconfig_options in the YAML.
+DEPENDENCIES = ["esp32"]
+AUTO_LOAD   = []
+CODEOWNERS  = ["@SentientCustard"]
 
 # Namespace / class wiring
 usb_lamparray_ns = cg.esphome_ns.namespace("usb_lamparray")
@@ -19,7 +26,7 @@ USBLampArrayComponent = usb_lamparray_ns.class_(
     "USBLampArrayComponent", cg.Component
 )
 
-# Valid lamp_array_kind strings → numeric values from the HID spec
+# Valid lamp_array_kind strings → numeric values (HID Usage Tables 1.3 §26)
 LAMP_ARRAY_KINDS = {
     "undefined":        0x00,
     "keyboard":         0x01,
@@ -35,16 +42,15 @@ LAMP_ARRAY_KINDS = {
 }
 
 # YAML config keys
-CONF_NUM_LAMPS          = "num_lamps"
-CONF_LAMP_ARRAY_KIND    = "lamp_array_kind"
-CONF_LIGHT_ID           = "light_id"
-CONF_VENDOR_ID          = "vendor_id"
-CONF_PRODUCT_ID         = "product_id"
-CONF_MANUFACTURER       = "manufacturer"
-CONF_PRODUCT            = "product"
-CONF_AUTONOMOUS_COLOR   = "autonomous_mode_color"
+CONF_NUM_LAMPS        = "num_lamps"
+CONF_LAMP_ARRAY_KIND  = "lamp_array_kind"
+CONF_LIGHT_ID         = "light_id"
+CONF_VENDOR_ID        = "vendor_id"
+CONF_PRODUCT_ID       = "product_id"
+CONF_MANUFACTURER     = "manufacturer"
+CONF_PRODUCT          = "product"
+CONF_AUTONOMOUS_COLOR = "autonomous_mode_color"
 
-# Schema
 CONFIG_SCHEMA = cv.Schema(
     {
         cv.GenerateID(): cv.declare_id(USBLampArrayComponent),
@@ -65,19 +71,12 @@ CONFIG_SCHEMA = cv.Schema(
 
 
 async def to_code(config):
-
-    # Tell ESPHome's tinyusb component we need a HID interface
-    # from esphome.components import tinyusb as tinyusb_comp
-    # tinyusb_comp.add_idf_sdkconfig_option("CONFIG_TINYUSB_HID_ENABLED", True)
-    # tinyusb_comp.add_idf_sdkconfig_option("CONFIG_TINYUSB_HID_COUNT", 1)
-    
     var = cg.new_Pvariable(config[CONF_ID])
     await cg.register_component(var, config)
 
     cg.add(var.set_num_lamps(config[CONF_NUM_LAMPS]))
     cg.add(var.set_lamp_array_kind(LAMP_ARRAY_KINDS[config[CONF_LAMP_ARRAY_KIND]]))
 
-    # Resolve the light reference to its underlying AddressableLight
     light_var = await cg.get_variable(config[CONF_LIGHT_ID])
     cg.add(var.set_light(light_var))
 
