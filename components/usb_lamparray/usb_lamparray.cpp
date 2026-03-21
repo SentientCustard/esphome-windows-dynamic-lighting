@@ -404,24 +404,29 @@ void USBLampArrayComponent::setup() {
   s_string_table[1] = this->manufacturer_.c_str();
   s_string_table[2] = this->product_.c_str();
 
-  // configuration_descriptor is inside an anonymous union in tinyusb_config_t:
-  //   union { struct { const uint8_t *configuration_descriptor; ... }; ... }
-  // When CFG_TUD_HID > 0, passing NULL here causes ESP_ERR_INVALID_ARG —
-  // the driver explicitly requires a config descriptor for HID devices.
+  // Call tinyusb_driver_install() directly using the flat-field API that
+  // descriptors_control.c expects. We do NOT use ESPHome's tinyusb component
+  // (no `tinyusb:` block in YAML, no "tinyusb" in DEPENDENCIES) because it
+  // uses an older nested `.descriptor` struct API and passes no
+  // configuration_descriptor — which with CFG_TUD_HID > 0 causes a fatal
+  // assert in descriptors_control.c:tud_descriptor_configuration_cb().
+  //
+  // The esp_tinyusb managed component headers are available directly from
+  // ESP-IDF without needing ESPHome's wrapper component.
   tinyusb_config_t tusb_cfg = {};
   tusb_cfg.device_descriptor        = &s_device_desc;
   tusb_cfg.string_descriptor        = s_string_table;
   tusb_cfg.string_descriptor_count  = 4;
   tusb_cfg.self_powered             = false;
-  // Single-speed device (full-speed only) — use the non-hs union member
-  tusb_cfg.configuration_descriptor = s_config_desc;
+  tusb_cfg.configuration_descriptor = s_config_desc;  // MUST be non-NULL when CFG_TUD_HID > 0
 
   esp_err_t err = tinyusb_driver_install(&tusb_cfg);
   if (err != ESP_OK) {
     ESP_LOGE(TAG, "tinyusb_driver_install failed: %s", esp_err_to_name(err));
-  } else {
-    ESP_LOGI(TAG, "USB LampArray HID device ready");
+    this->mark_failed();
+    return;
   }
+  ESP_LOGI(TAG, "USB LampArray HID device ready");
 }
 
 void USBLampArrayComponent::loop() {
