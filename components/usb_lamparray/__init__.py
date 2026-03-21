@@ -14,13 +14,13 @@ import esphome.config_validation as cv
 from esphome.components import light
 from esphome.const import CONF_ID
 
-# "tinyusb" must stay here — it pulls in tinyusb.h, tusb.h, hid_device.h and
-# the Kconfig/sdkconfig options needed to compile.
-# We call tinyusb_driver_install() ourselves in setup() before ESPHome's
-# tinyusb component gets a chance to, passing our custom HID descriptors.
-# If ESPHome's component then also tries to call tinyusb_driver_install() it
-# will get ESP_ERR_INVALID_STATE (already installed) which is harmless.
-DEPENDENCIES = ["esp32", "tinyusb"]
+# "tinyusb" intentionally NOT listed here. ESPHome's tinyusb component uses
+# an older nested-struct API (.descriptor = ...) and passes no
+# configuration_descriptor, which causes a fatal assert when CFG_TUD_HID > 0.
+# We call tinyusb_driver_install() ourselves in setup() using the correct
+# flat-field API. The esp_tinyusb headers are available directly from the
+# ESP-IDF managed component without needing ESPHome's wrapper.
+DEPENDENCIES = ["esp32"]
 AUTO_LOAD   = []
 CODEOWNERS  = ["@SentientCustard"]
 
