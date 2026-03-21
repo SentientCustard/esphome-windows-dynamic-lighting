@@ -84,59 +84,54 @@ static const uint8_t LAMP_ARRAY_DESCRIPTOR[] = {
   0xA1, 0x01,                             // Collection (Application)
 
   // -- Report 0x01: LampArrayAttributesReport (Feature, device → host) --
+  // No nested logical collection — items sit directly in Application collection
   0x85, REPORT_ID_LAMP_ARRAY_ATTRIBUTES_REPORT,
-  0x09, HID_USAGE_LAMP_ARRAY_ATTRS,
-  0xA1, 0x02,                             // Collection (Logical)
+    // LampCount: uint16
     0x09, HID_USAGE_LAMP_COUNT,
-    0x15, 0x01,
-    0x27, 0xFF, 0xFF, 0x00, 0x00,
-    0x75, 0x10,
-    0x95, 0x01,
+    0x15, 0x01,                           // Logical Minimum (1)
+    0x27, 0xFF, 0xFF, 0x00, 0x00,         // Logical Maximum (65535)
+    0x75, 0x10,                           // Report Size (16)
+    0x95, 0x01,                           // Report Count (1)
     0xB1, 0x03,                           // Feature (Const, Var, Abs)
+    // BoundingBoxWidth, Height, Depth: 3x uint32
     0x09, HID_USAGE_BOUNDING_BOX_W,
     0x09, HID_USAGE_BOUNDING_BOX_H,
     0x09, HID_USAGE_BOUNDING_BOX_D,
-    0x15, 0x00,
-    0x27, 0xFF, 0xFF, 0xFF, 0x7F,
-    0x75, 0x20,
-    0x95, 0x03,
-    0xB1, 0x03,
+    0x15, 0x00,                           // Logical Minimum (0)
+    0x27, 0xFF, 0xFF, 0xFF, 0x7F,         // Logical Maximum (2147483647)
+    0x75, 0x20,                           // Report Size (32)
+    0x95, 0x03,                           // Report Count (3)
+    0xB1, 0x03,                           // Feature (Const, Var, Abs)
+    // LampArrayKind: uint32
     0x09, HID_USAGE_LAMP_ARRAY_KIND,
-    0x15, 0x00,
-    0x27, 0xFF, 0xFF, 0xFF, 0x7F,
     0x75, 0x20,
     0x95, 0x01,
     0xB1, 0x03,
+    // MinUpdateInterval: uint32
     0x09, HID_USAGE_MIN_UPDATE_INT,
-    0x15, 0x00,
-    0x27, 0xFF, 0xFF, 0xFF, 0x7F,
     0x75, 0x20,
     0x95, 0x01,
     0xB1, 0x03,
-  0xC0,                                   // End Collection (LampArrayAttributes)
 
   // -- Report 0x02: LampAttributesRequestReport (Feature, host → device) --
   0x85, REPORT_ID_LAMP_ATTRIBUTES_REQUEST_REPORT,
-  0x09, HID_USAGE_LAMP_ATTRS_REQ,
-  0xA1, 0x02,
     0x09, HID_USAGE_LAMP_ID,
     0x15, 0x00,
     0x27, 0xFF, 0xFF, 0x00, 0x00,
     0x75, 0x10,
     0x95, 0x01,
-    0xB1, 0x02,
-  0xC0,
+    0xB1, 0x02,                           // Feature (Data, Var, Abs)
 
   // -- Report 0x03: LampAttributesResponseReport (Feature, device → host) --
   0x85, REPORT_ID_LAMP_ATTRIBUTES_RESPONSE_REPORT,
-  0x09, HID_USAGE_LAMP_ATTRS_RESP,
-  0xA1, 0x02,
+    // LampId: uint16
     0x09, HID_USAGE_LAMP_ID,
     0x15, 0x00,
     0x27, 0xFF, 0xFF, 0x00, 0x00,
     0x75, 0x10,
     0x95, 0x01,
     0xB1, 0x03,
+    // PositionX/Y/Z, UpdateLatency, LampPurposes: 5x uint32
     0x09, HID_USAGE_POSITION_X,
     0x09, HID_USAGE_POSITION_Y,
     0x09, HID_USAGE_POSITION_Z,
@@ -147,6 +142,8 @@ static const uint8_t LAMP_ARRAY_DESCRIPTOR[] = {
     0x75, 0x20,
     0x95, 0x05,
     0xB1, 0x03,
+    // RedLevelCount, GreenLevelCount, BlueLevelCount,
+    // IntensityLevelCount, IsProgrammable, InputBinding: 6x uint8
     0x09, HID_USAGE_RED_LEVEL_COUNT,
     0x09, HID_USAGE_GREEN_LEVEL_COUNT,
     0x09, HID_USAGE_BLUE_LEVEL_COUNT,
@@ -158,28 +155,28 @@ static const uint8_t LAMP_ARRAY_DESCRIPTOR[] = {
     0x75, 0x08,
     0x95, 0x06,
     0xB1, 0x03,
-  0xC0,
 
   // -- Report 0x04: LampMultiUpdateReport (Output, host → device) --
   0x85, REPORT_ID_LAMP_MULTI_UPDATE_REPORT,
-  0x09, HID_USAGE_LAMP_MULTI_UPD,
-  0xA1, 0x02,
+    // LampCount: uint8
     0x09, HID_USAGE_LAMP_COUNT,
     0x15, 0x00,
     0x25, 0x08,
     0x75, 0x08,
     0x95, 0x01,
     0x91, 0x02,
+    // LampUpdateFlags: uint8
     0x09, HID_USAGE_LAMP_UPDATE_FLAGS,
     0x15, 0x00,
     0x25, 0xFF,
     0x75, 0x08,
     0x95, 0x01,
     0x91, 0x02,
+    // Reserved: uint8
     0x75, 0x08,
     0x95, 0x01,
-    0x91, 0x03,                           // Reserved
-    // 8x LampId (uint16 each)
+    0x91, 0x03,
+    // 8x LampId: uint16 each
     0x09, HID_USAGE_LAMP_ID,
     0x09, HID_USAGE_LAMP_ID,
     0x09, HID_USAGE_LAMP_ID,
@@ -231,21 +228,21 @@ static const uint8_t LAMP_ARRAY_DESCRIPTOR[] = {
     0x75, 0x08,
     0x95, 0x20,                           // 32 fields (8 lamps × 4 channels)
     0x91, 0x02,
-  0xC0,
 
   // -- Report 0x05: LampRangeUpdateReport (Output, host → device) --
   0x85, REPORT_ID_LAMP_RANGE_UPDATE_REPORT,
-  0x09, HID_USAGE_LAMP_RANGE_UPD,
-  0xA1, 0x02,
+    // LampUpdateFlags: uint8
     0x09, HID_USAGE_LAMP_UPDATE_FLAGS,
     0x15, 0x00,
     0x25, 0xFF,
     0x75, 0x08,
     0x95, 0x01,
     0x91, 0x02,
+    // Reserved: 2 bytes
     0x75, 0x08,
     0x95, 0x02,
-    0x91, 0x03,                           // Reserved (2 bytes)
+    0x91, 0x03,
+    // LampIdStart, LampIdEnd: uint16 each
     0x09, HID_USAGE_LAMP_ID_START,
     0x09, HID_USAGE_LAMP_ID_END,
     0x15, 0x00,
@@ -253,6 +250,7 @@ static const uint8_t LAMP_ARRAY_DESCRIPTOR[] = {
     0x75, 0x10,
     0x95, 0x02,
     0x91, 0x02,
+    // Red, Green, Blue, Intensity: uint8 each
     0x09, HID_USAGE_RED_UPDATE,
     0x09, HID_USAGE_GREEN_UPDATE,
     0x09, HID_USAGE_BLUE_UPDATE,
@@ -262,19 +260,15 @@ static const uint8_t LAMP_ARRAY_DESCRIPTOR[] = {
     0x75, 0x08,
     0x95, 0x04,
     0x91, 0x02,
-  0xC0,
 
   // -- Report 0x06: LampArrayControlReport (Feature, host → device) --
   0x85, REPORT_ID_LAMP_ARRAY_CONTROL_REPORT,
-  0x09, HID_USAGE_LAMP_ARRAY_CTRL,
-  0xA1, 0x02,
     0x09, HID_USAGE_AUTONOMOUS_MODE,
     0x15, 0x00,
     0x25, 0x01,
     0x75, 0x08,
     0x95, 0x01,
     0xB1, 0x02,
-  0xC0,
 
   0xC0,                                   // End Collection (LampArray)
 };
