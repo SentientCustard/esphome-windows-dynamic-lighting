@@ -87,7 +87,10 @@ async def to_code(config):
     # ref="1.7.6~1" matches what ESPHome's own tinyusb component uses.
     add_idf_component(name="espressif/esp_tinyusb", ref="1.7.6~1")
 
-    # Enable HID class in TinyUSB via sdkconfig
+    # Enable TinyUSB via IDF sdkconfig — NOT via the YAML sdkconfig_options
+    # block, which triggers ESPHome's tinyusb component auto-loader and causes
+    # a second tinyusb_driver_install call with a blank descriptor.
+    add_idf_sdkconfig_option("CONFIG_TINYUSB_ENABLED", True)
     add_idf_sdkconfig_option("CONFIG_TINYUSB_HID_ENABLED", True)
     add_idf_sdkconfig_option("CONFIG_TINYUSB_HID_COUNT", 1)
     add_idf_sdkconfig_option("CONFIG_TINYUSB_CDC_ENABLED", False)
