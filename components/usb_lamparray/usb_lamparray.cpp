@@ -282,8 +282,13 @@ static const uint8_t LAMP_ARRAY_DESCRIPTOR[] = {
 // ============================================================================
 // USB descriptor tables
 //
-// These are used both by tinyusb_driver_install() (device + strings) and
-// by tud_descriptor_configuration_cb() (config descriptor with HID interface).
+// All three tables are passed to tinyusb_driver_install() in setup().
+// descriptors_control.c stores them in s_desc_cfg and serves them from
+// tud_descriptor_device_cb / tud_descriptor_configuration_cb /
+// tud_descriptor_string_cb — we must NOT redefine those functions.
+//
+// Key: when CFG_TUD_HID > 0, configuration_descriptor MUST be non-NULL or
+// tinyusb_driver_install returns ESP_ERR_INVALID_ARG.
 // ============================================================================
 #define _CONFIG_TOTAL_LEN  (TUD_CONFIG_DESC_LEN + TUD_HID_DESC_LEN)
 #define _EPNUM_HID         0x81            // EP1 IN (interrupt)
@@ -331,13 +336,11 @@ static const char *s_string_table[] = {
 // ============================================================================
 // TinyUSB C-linkage callbacks
 //
-// NOTE: tud_descriptor_configuration_cb is a STRONG symbol in this version of
-// esp_tinyusb (descriptors_control.c) — we cannot override it here.
-// Instead we pass our config descriptor via tinyusb_driver_install() in
-// setup(). See setup() for the correct tinyusb_config_t field name, which
-// we determine at runtime from descriptors_control.c in the build tree.
+// tud_descriptor_*_cb are owned by descriptors_control.c (strong symbols) —
+// do NOT redefine them here. They are fed by tinyusb_driver_install() above.
 //
-// The HID-level callbacks below are genuine TinyUSB extension points.
+// The HID-level callbacks below are genuine TinyUSB extension points that
+// the HID class driver calls once the interface is active.
 // ============================================================================
 extern "C" {
 
@@ -401,16 +404,17 @@ void USBLampArrayComponent::setup() {
   s_string_table[1] = this->manufacturer_.c_str();
   s_string_table[2] = this->product_.c_str();
 
-  // Pass our device descriptor and strings to tinyusb_driver_install().
-  // The configuration descriptor (which contains the HID interface) cannot
-  // be passed via tinyusb_config_t in ESP-IDF 5.x — that field exists in the
-  // docs but not in the actual header. Instead, tud_descriptor_configuration_cb
-  // below overrides the weak default and returns our HID config descriptor.
+  // configuration_descriptor is inside an anonymous union in tinyusb_config_t:
+  //   union { struct { const uint8_t *configuration_descriptor; ... }; ... }
+  // When CFG_TUD_HID > 0, passing NULL here causes ESP_ERR_INVALID_ARG —
+  // the driver explicitly requires a config descriptor for HID devices.
   tinyusb_config_t tusb_cfg = {};
-  tusb_cfg.device_descriptor       = &s_device_desc;
-  tusb_cfg.string_descriptor       = s_string_table;
-  tusb_cfg.string_descriptor_count = 4;
-  tusb_cfg.self_powered            = false;
+  tusb_cfg.device_descriptor        = &s_device_desc;
+  tusb_cfg.string_descriptor        = s_string_table;
+  tusb_cfg.string_descriptor_count  = 4;
+  tusb_cfg.self_powered             = false;
+  // Single-speed device (full-speed only) — use the non-hs union member
+  tusb_cfg.configuration_descriptor = s_config_desc;
 
   esp_err_t err = tinyusb_driver_install(&tusb_cfg);
   if (err != ESP_OK) {
