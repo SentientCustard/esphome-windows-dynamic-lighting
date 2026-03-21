@@ -47,18 +47,19 @@ USBLampArrayComponent *USBLampArrayComponent::instance_ = nullptr;
 #define HID_USAGE_MIN_UPDATE_INT    0x08
 #define HID_USAGE_LAMP_ATTRS_REQ    0x20
 #define HID_USAGE_LAMP_ID           0x21
-#define HID_USAGE_LAMP_ATTRS_RESP   0x28
-#define HID_USAGE_POSITION_X        0x29
-#define HID_USAGE_POSITION_Y        0x2A
-#define HID_USAGE_POSITION_Z        0x2B
-#define HID_USAGE_LAMP_PURPOSES     0x2C
-#define HID_USAGE_UPDATE_LATENCY    0x2D
-#define HID_USAGE_RED_LEVEL_COUNT   0x2E
-#define HID_USAGE_GREEN_LEVEL_COUNT 0x2F
-#define HID_USAGE_BLUE_LEVEL_COUNT  0x30
-#define HID_USAGE_INTENSITY_COUNT   0x31
-#define HID_USAGE_IS_PROGRAMMABLE   0x32
-#define HID_USAGE_INPUT_BINDING     0x33
+// Report 0x03 usages — using values from working Zephyr implementation
+#define HID_USAGE_LAMP_ATTRS_RESP   0x22  // was 0x28
+#define HID_USAGE_POSITION_X        0x23  // was 0x29
+#define HID_USAGE_POSITION_Y        0x24  // was 0x2A
+#define HID_USAGE_POSITION_Z        0x25  // was 0x2B
+#define HID_USAGE_LAMP_PURPOSES     0x26  // was 0x2C
+#define HID_USAGE_UPDATE_LATENCY    0x27  // was 0x2D
+#define HID_USAGE_RED_LEVEL_COUNT   0x28  // was 0x2E
+#define HID_USAGE_GREEN_LEVEL_COUNT 0x29  // was 0x2F
+#define HID_USAGE_BLUE_LEVEL_COUNT  0x2A  // was 0x30
+#define HID_USAGE_INTENSITY_COUNT   0x2B  // was 0x31
+#define HID_USAGE_IS_PROGRAMMABLE   0x2C  // was 0x32
+#define HID_USAGE_INPUT_BINDING     0x2D  // was 0x33
 #define HID_USAGE_LAMP_MULTI_UPD    0x50
 #define HID_USAGE_RED_UPDATE        0x51
 #define HID_USAGE_GREEN_UPDATE      0x52
@@ -71,11 +72,14 @@ USBLampArrayComponent *USBLampArrayComponent::instance_ = nullptr;
 #define HID_USAGE_LAMP_ARRAY_CTRL   0x70
 #define HID_USAGE_AUTONOMOUS_MODE   0x71
 
-// LampUpdateFlags bitmask (HID Usage Tables 1.3 §26.6)
+// LampUpdateFlags bitmask (HID Usage Tables §26.6)
 // Bit 0: LampUpdateComplete — commit pending colours to the array now
 #ifndef LAMP_UPDATE_FLAG_COMPLETE
 #define LAMP_UPDATE_FLAG_COMPLETE  0x01
 #endif
+
+// Number of lamps in Report 4 — fixed at 8 (max per multi-update report)
+#define LAMP_MULTI_UPDATE_COUNT 8
 
 static const uint8_t LAMP_ARRAY_DESCRIPTOR[] = {
   // ---- Top-level collection: LampArray ----
@@ -83,67 +87,65 @@ static const uint8_t LAMP_ARRAY_DESCRIPTOR[] = {
   0x09, HID_USAGE_LAMP_ARRAY,             // Usage (LampArray)
   0xA1, 0x01,                             // Collection (Application)
 
-  // -- Report 0x01: LampArrayAttributesReport (Feature, device → host) --
-  // No nested logical collection — items sit directly in Application collection
+  // -- Report 0x01: LampArrayAttributesReport --
   0x85, REPORT_ID_LAMP_ARRAY_ATTRIBUTES_REPORT,
+  0x09, HID_USAGE_LAMP_ARRAY_ATTRS,
+  0xA1, 0x02,                             // Collection (Logical)
     // LampCount: uint16
     0x09, HID_USAGE_LAMP_COUNT,
-    0x15, 0x01,                           // Logical Minimum (1)
+    0x15, 0x00,                           // Logical Minimum (0)
     0x27, 0xFF, 0xFF, 0x00, 0x00,         // Logical Maximum (65535)
     0x75, 0x10,                           // Report Size (16)
     0x95, 0x01,                           // Report Count (1)
     0xB1, 0x03,                           // Feature (Const, Var, Abs)
-    // BoundingBoxWidth, Height, Depth: 3x uint32
+    // BoundingBoxW/H/D, Kind, MinUpdateInterval: 5x uint32
     0x09, HID_USAGE_BOUNDING_BOX_W,
     0x09, HID_USAGE_BOUNDING_BOX_H,
     0x09, HID_USAGE_BOUNDING_BOX_D,
+    0x09, HID_USAGE_LAMP_ARRAY_KIND,
+    0x09, HID_USAGE_MIN_UPDATE_INT,
     0x15, 0x00,                           // Logical Minimum (0)
     0x27, 0xFF, 0xFF, 0xFF, 0x7F,         // Logical Maximum (2147483647)
     0x75, 0x20,                           // Report Size (32)
-    0x95, 0x03,                           // Report Count (3)
+    0x95, 0x05,                           // Report Count (5)
     0xB1, 0x03,                           // Feature (Const, Var, Abs)
-    // LampArrayKind: uint32
-    0x09, HID_USAGE_LAMP_ARRAY_KIND,
-    0x75, 0x20,
-    0x95, 0x01,
-    0xB1, 0x03,
-    // MinUpdateInterval: uint32
-    0x09, HID_USAGE_MIN_UPDATE_INT,
-    0x75, 0x20,
-    0x95, 0x01,
-    0xB1, 0x03,
+  0xC0,                                   // End Collection
 
-  // -- Report 0x02: LampAttributesRequestReport (Feature, host → device) --
+  // -- Report 0x02: LampAttributesRequestReport --
   0x85, REPORT_ID_LAMP_ATTRIBUTES_REQUEST_REPORT,
+  0x09, HID_USAGE_LAMP_ATTRS_REQ,
+  0xA1, 0x02,                             // Collection (Logical)
     0x09, HID_USAGE_LAMP_ID,
     0x15, 0x00,
     0x27, 0xFF, 0xFF, 0x00, 0x00,
     0x75, 0x10,
     0x95, 0x01,
     0xB1, 0x02,                           // Feature (Data, Var, Abs)
+  0xC0,
 
-  // -- Report 0x03: LampAttributesResponseReport (Feature, device → host) --
+  // -- Report 0x03: LampAttributesResponseReport --
   0x85, REPORT_ID_LAMP_ATTRIBUTES_RESPONSE_REPORT,
+  0x09, HID_USAGE_LAMP_ATTRS_RESP,
+  0xA1, 0x02,                             // Collection (Logical)
     // LampId: uint16
     0x09, HID_USAGE_LAMP_ID,
     0x15, 0x00,
     0x27, 0xFF, 0xFF, 0x00, 0x00,
     0x75, 0x10,
     0x95, 0x01,
-    0xB1, 0x03,
-    // PositionX/Y/Z, UpdateLatency, LampPurposes: 5x uint32
+    0xB1, 0x02,                           // Feature (Data, Var, Abs)
+    // PositionX/Y/Z, LampPurposes, UpdateLatency: 5x uint32
     0x09, HID_USAGE_POSITION_X,
     0x09, HID_USAGE_POSITION_Y,
     0x09, HID_USAGE_POSITION_Z,
-    0x09, HID_USAGE_UPDATE_LATENCY,
     0x09, HID_USAGE_LAMP_PURPOSES,
+    0x09, HID_USAGE_UPDATE_LATENCY,
     0x15, 0x00,
     0x27, 0xFF, 0xFF, 0xFF, 0x7F,
     0x75, 0x20,
     0x95, 0x05,
-    0xB1, 0x03,
-    // RedLevelCount, GreenLevelCount, BlueLevelCount,
-    // IntensityLevelCount, IsProgrammable, InputBinding: 6x uint8
+    0xB1, 0x02,                           // Feature (Data, Var, Abs)
+    // Red/Green/Blue/IntensityLevelCount, IsProgrammable, InputBinding: 6x uint8
     0x09, HID_USAGE_RED_LEVEL_COUNT,
     0x09, HID_USAGE_GREEN_LEVEL_COUNT,
     0x09, HID_USAGE_BLUE_LEVEL_COUNT,
@@ -154,29 +156,22 @@ static const uint8_t LAMP_ARRAY_DESCRIPTOR[] = {
     0x26, 0xFF, 0x00,
     0x75, 0x08,
     0x95, 0x06,
-    0xB1, 0x03,
+    0xB1, 0x02,                           // Feature (Data, Var, Abs)
+  0xC0,
 
-  // -- Report 0x04: LampMultiUpdateReport (Feature, host → device) --
+  // -- Report 0x04: LampMultiUpdateReport --
   0x85, REPORT_ID_LAMP_MULTI_UPDATE_REPORT,
-    // LampCount: uint8
+  0x09, HID_USAGE_LAMP_MULTI_UPD,
+  0xA1, 0x02,                             // Collection (Logical)
+    // LampCount + LampUpdateFlags: 2x uint8
     0x09, HID_USAGE_LAMP_COUNT,
+    0x09, HID_USAGE_LAMP_UPDATE_FLAGS,
     0x15, 0x00,
     0x25, 0x08,
     0x75, 0x08,
-    0x95, 0x01,
-    0xB1, 0x02,
-    // LampUpdateFlags: uint8
-    0x09, HID_USAGE_LAMP_UPDATE_FLAGS,
-    0x15, 0x00,
-    0x25, 0xFF,
-    0x75, 0x08,
-    0x95, 0x01,
-    0xB1, 0x02,
-    // Reserved: uint8
-    0x75, 0x08,
-    0x95, 0x01,
-    0xB1, 0x03,
-    // 8x LampId: uint16 each
+    0x95, 0x02,
+    0xB1, 0x02,                           // Feature (Data, Var, Abs)
+    // 8x LampId: uint16
     0x09, HID_USAGE_LAMP_ID,
     0x09, HID_USAGE_LAMP_ID,
     0x09, HID_USAGE_LAMP_ID,
@@ -189,62 +184,58 @@ static const uint8_t LAMP_ARRAY_DESCRIPTOR[] = {
     0x27, 0xFF, 0xFF, 0x00, 0x00,
     0x75, 0x10,
     0x95, 0x08,
-    0xB1, 0x02,
-    // 8x Red, 8x Green, 8x Blue, 8x Intensity
-    // Declare Logical Min/Max BEFORE the usages — otherwise they inherit
-    // the 0-65535 range from the LampId fields above, which is a parse
-    // error when Report Size is 8 (65535 doesn't fit in 8 bits).
-    0x15, 0x00,                           // Logical Minimum (0)
-    0x26, 0xFF, 0x00,                     // Logical Maximum (255)
-    0x75, 0x08,                           // Report Size (8)
-    0x95, 0x20,                           // Report Count (32 = 8 lamps × 4 channels)
-    0x09, HID_USAGE_RED_UPDATE,
-    0x09, HID_USAGE_RED_UPDATE,
-    0x09, HID_USAGE_RED_UPDATE,
-    0x09, HID_USAGE_RED_UPDATE,
-    0x09, HID_USAGE_RED_UPDATE,
-    0x09, HID_USAGE_RED_UPDATE,
-    0x09, HID_USAGE_RED_UPDATE,
+    0xB1, 0x02,                           // Feature (Data, Var, Abs)
+    // 8x {Red, Green, Blue, Intensity}: 32x uint8
     0x09, HID_USAGE_RED_UPDATE,
     0x09, HID_USAGE_GREEN_UPDATE,
-    0x09, HID_USAGE_GREEN_UPDATE,
-    0x09, HID_USAGE_GREEN_UPDATE,
-    0x09, HID_USAGE_GREEN_UPDATE,
-    0x09, HID_USAGE_GREEN_UPDATE,
-    0x09, HID_USAGE_GREEN_UPDATE,
-    0x09, HID_USAGE_GREEN_UPDATE,
+    0x09, HID_USAGE_BLUE_UPDATE,
+    0x09, HID_USAGE_INTENSITY_UPDATE,
+    0x09, HID_USAGE_RED_UPDATE,
     0x09, HID_USAGE_GREEN_UPDATE,
     0x09, HID_USAGE_BLUE_UPDATE,
-    0x09, HID_USAGE_BLUE_UPDATE,
-    0x09, HID_USAGE_BLUE_UPDATE,
-    0x09, HID_USAGE_BLUE_UPDATE,
-    0x09, HID_USAGE_BLUE_UPDATE,
-    0x09, HID_USAGE_BLUE_UPDATE,
-    0x09, HID_USAGE_BLUE_UPDATE,
+    0x09, HID_USAGE_INTENSITY_UPDATE,
+    0x09, HID_USAGE_RED_UPDATE,
+    0x09, HID_USAGE_GREEN_UPDATE,
     0x09, HID_USAGE_BLUE_UPDATE,
     0x09, HID_USAGE_INTENSITY_UPDATE,
+    0x09, HID_USAGE_RED_UPDATE,
+    0x09, HID_USAGE_GREEN_UPDATE,
+    0x09, HID_USAGE_BLUE_UPDATE,
     0x09, HID_USAGE_INTENSITY_UPDATE,
+    0x09, HID_USAGE_RED_UPDATE,
+    0x09, HID_USAGE_GREEN_UPDATE,
+    0x09, HID_USAGE_BLUE_UPDATE,
     0x09, HID_USAGE_INTENSITY_UPDATE,
+    0x09, HID_USAGE_RED_UPDATE,
+    0x09, HID_USAGE_GREEN_UPDATE,
+    0x09, HID_USAGE_BLUE_UPDATE,
     0x09, HID_USAGE_INTENSITY_UPDATE,
+    0x09, HID_USAGE_RED_UPDATE,
+    0x09, HID_USAGE_GREEN_UPDATE,
+    0x09, HID_USAGE_BLUE_UPDATE,
     0x09, HID_USAGE_INTENSITY_UPDATE,
+    0x09, HID_USAGE_RED_UPDATE,
+    0x09, HID_USAGE_GREEN_UPDATE,
+    0x09, HID_USAGE_BLUE_UPDATE,
     0x09, HID_USAGE_INTENSITY_UPDATE,
-    0x09, HID_USAGE_INTENSITY_UPDATE,
-    0x09, HID_USAGE_INTENSITY_UPDATE,
-    0xB1, 0x02,
+    0x15, 0x00,
+    0x26, 0xFF, 0x00,
+    0x75, 0x08,
+    0x95, 0x20,                           // 32 fields (8 lamps × 4 channels)
+    0xB1, 0x02,                           // Feature (Data, Var, Abs)
+  0xC0,
 
-  // -- Report 0x05: LampRangeUpdateReport (Feature, host → device) --
+  // -- Report 0x05: LampRangeUpdateReport --
   0x85, REPORT_ID_LAMP_RANGE_UPDATE_REPORT,
+  0x09, HID_USAGE_LAMP_RANGE_UPD,
+  0xA1, 0x02,                             // Collection (Logical)
     // LampUpdateFlags: uint8
     0x09, HID_USAGE_LAMP_UPDATE_FLAGS,
     0x15, 0x00,
-    0x25, 0xFF,
+    0x25, 0x08,
     0x75, 0x08,
     0x95, 0x01,
-    0xB1, 0x02,
-    // Reserved: 2 bytes
-    0x75, 0x08,
-    0x95, 0x02,
-    0xB1, 0x03,
+    0xB1, 0x02,                           // Feature (Data, Var, Abs)
     // LampIdStart, LampIdEnd: uint16 each
     0x09, HID_USAGE_LAMP_ID_START,
     0x09, HID_USAGE_LAMP_ID_END,
@@ -252,7 +243,7 @@ static const uint8_t LAMP_ARRAY_DESCRIPTOR[] = {
     0x27, 0xFF, 0xFF, 0x00, 0x00,
     0x75, 0x10,
     0x95, 0x02,
-    0xB1, 0x02,
+    0xB1, 0x02,                           // Feature (Data, Var, Abs)
     // Red, Green, Blue, Intensity: uint8 each
     0x09, HID_USAGE_RED_UPDATE,
     0x09, HID_USAGE_GREEN_UPDATE,
@@ -262,19 +253,24 @@ static const uint8_t LAMP_ARRAY_DESCRIPTOR[] = {
     0x26, 0xFF, 0x00,
     0x75, 0x08,
     0x95, 0x04,
-    0xB1, 0x02,
+    0xB1, 0x02,                           // Feature (Data, Var, Abs)
+  0xC0,
 
-  // -- Report 0x06: LampArrayControlReport (Feature, host → device) --
+  // -- Report 0x06: LampArrayControlReport --
   0x85, REPORT_ID_LAMP_ARRAY_CONTROL_REPORT,
+  0x09, HID_USAGE_LAMP_ARRAY_CTRL,
+  0xA1, 0x02,                             // Collection (Logical)
     0x09, HID_USAGE_AUTONOMOUS_MODE,
     0x15, 0x00,
     0x25, 0x01,
     0x75, 0x08,
     0x95, 0x01,
-    0xB1, 0x02,
+    0xB1, 0x02,                           // Feature (Data, Var, Abs)
+  0xC0,
 
   0xC0,                                   // End Collection (LampArray)
 };
+
 
 // ============================================================================
 // USB descriptor tables
@@ -316,7 +312,7 @@ static const uint8_t s_config_desc[] = {
     sizeof(LAMP_ARRAY_DESCRIPTOR),  // HID report descriptor length
     _EPNUM_HID,                     // EP1 IN
     64,                             // Max packet size
-    5                               // Polling interval (ms)
+    1                               // Polling interval (1ms - matches working implementations)
   )
 };
 
