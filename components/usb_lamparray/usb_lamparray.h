@@ -22,8 +22,8 @@ class USBLampArrayComponent : public Component {
   // ---- ESPHome lifecycle ----
   void setup() override;
   void loop() override;
-  float get_setup_priority() const override { return setup_priority::HARDWARE; }
-
+  //float get_setup_priority() const override { return setup_priority::HARDWARE; }
+  float get_setup_priority() const override { return esphome::setup_priority::HARDWARE; }
   // ---- Configuration setters (called from __init__.py generated code) ----
   void set_num_lamps(uint16_t count)             { this->num_lamps_ = count; }
   void set_lamp_array_kind(uint32_t kind)        { this->lamp_array_kind_ = kind; }
