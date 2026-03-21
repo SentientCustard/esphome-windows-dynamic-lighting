@@ -5,7 +5,9 @@
 #include <cmath>
 #include "esp_mac.h"
 
-// TinyUSB — available via ESPHome framework = esp-idf
+// TinyUSB — pulled in by the `tinyusb:` component in fan-leds.yaml
+// We use tinyusb_driver_install() with a custom config rather than overriding
+// the descriptor callbacks, because ESPHome's tinyusb component owns those.
 #include "tinyusb.h"
 #include "tusb.h"
 #include "class/hid/hid_device.h"
@@ -272,35 +274,24 @@ static const uint8_t LAMP_ARRAY_DESCRIPTOR[] = {
 };
 
 // ============================================================================
-// USB descriptor constants
+// USB descriptor tables
+//
+// These are passed directly to tinyusb_driver_install() in setup() rather
+// than via callback overrides. ESPHome's tinyusb component owns the
+// tud_descriptor_*_cb symbols; we give our descriptors to it at install time.
 // ============================================================================
 #define _CONFIG_TOTAL_LEN  (TUD_CONFIG_DESC_LEN + TUD_HID_DESC_LEN)
 #define _EPNUM_HID         0x81            // EP1 IN (interrupt)
 
-// ============================================================================
-// TinyUSB C-linkage callbacks
-//
-// We own ALL descriptor callbacks here because ESPHome's built-in tinyusb
-// component does not support HID. This means fan-leds.yaml must NOT have a
-// `tinyusb:` block and __init__.py must NOT list "tinyusb" in DEPENDENCIES —
-// otherwise there will be duplicate symbol linker errors.
-// ============================================================================
-
-extern "C" {
-
-// ----------------------------------------------------------------------------
-// USB Device Descriptor
-// bDeviceClass = 0x00: class is defined at interface level (required for HID)
-// ----------------------------------------------------------------------------
 static const tusb_desc_device_t s_device_desc = {
   .bLength            = sizeof(tusb_desc_device_t),
   .bDescriptorType    = TUSB_DESC_DEVICE,
   .bcdUSB             = 0x0200,
-  .bDeviceClass       = 0x00,
+  .bDeviceClass       = 0x00,   // class defined at interface level — required for HID
   .bDeviceSubClass    = 0x00,
   .bDeviceProtocol    = 0x00,
   .bMaxPacketSize0    = CFG_TUD_ENDPOINT0_SIZE,
-  .idVendor           = 0x303A,           // Espressif default VID
+  .idVendor           = 0x303A,
   .idProduct          = 0x4004,
   .bcdDevice          = 0x0100,
   .iManufacturer      = 0x01,
@@ -309,14 +300,6 @@ static const tusb_desc_device_t s_device_desc = {
   .bNumConfigurations = 0x01
 };
 
-uint8_t const *tud_descriptor_device_cb(void) {
-  return (uint8_t const *)&s_device_desc;
-}
-
-// ----------------------------------------------------------------------------
-// USB Configuration Descriptor
-// TUD_HID_DESCRIPTOR wires in our HID interface + EP1 IN
-// ----------------------------------------------------------------------------
 static const uint8_t s_config_desc[] = {
   TUD_CONFIG_DESCRIPTOR(1, 1, 0, _CONFIG_TOTAL_LEN, 0x00, 100),
   TUD_HID_DESCRIPTOR(
@@ -330,91 +313,45 @@ static const uint8_t s_config_desc[] = {
   )
 };
 
-uint8_t const *tud_descriptor_configuration_cb(uint8_t index) {
-  (void)index;
-  return s_config_desc;
-}
+// String table — index 0 is the language ID bytes, 1-3 are UTF-8 strings that
+// esp_tinyusb converts to UTF-16 internally.
+// Entries 1 and 2 are overwritten at runtime from YAML config in setup().
+static const char *s_string_table[] = {
+  "\x09\x04",      // 0: Language = English (US)
+  "ESPHome",       // 1: Manufacturer  ← replaced in setup()
+  "USB LampArray", // 2: Product       ← replaced in setup()
+  "000001",        // 3: Serial number
+};
 
-// ----------------------------------------------------------------------------
-// USB String Descriptors
-// 0 = language list, 1 = manufacturer, 2 = product, 3 = serial number
-// ----------------------------------------------------------------------------
-static uint16_t s_str_buf[32];
+// ============================================================================
+// TinyUSB C-linkage HID callbacks
+// (descriptor callbacks are handled internally by esp_tinyusb once we pass
+//  our tables to tinyusb_driver_install)
+// ============================================================================
+extern "C" {
 
-uint16_t const *tud_descriptor_string_cb(uint8_t index, uint16_t langid) {
-  (void)langid;
-  const char *str = nullptr;
-  uint8_t len;
-
-  if (index == 0) {
-    s_str_buf[1] = 0x0409;          // English (US)
-    len = 1;
-  } else {
-    auto *comp = esphome::usb_lamparray::USBLampArrayComponent::instance();
-    switch (index) {
-      case 1:
-        str = (comp && comp->get_manufacturer()[0])
-              ? comp->get_manufacturer() : "ESPHome";
-        break;
-      case 2:
-        str = (comp && comp->get_product()[0])
-              ? comp->get_product() : "USB LampArray";
-        break;
-      case 3:
-        str = "000001";
-        break;
-      default:
-        return nullptr;
-    }
-    len = (uint8_t)strlen(str);
-    if (len > 31) len = 31;
-    for (uint8_t i = 0; i < len; i++)
-      s_str_buf[1 + i] = str[i];    // ASCII → UTF-16LE
-  }
-
-  // High byte = descriptor type (0x03), low byte = total length in bytes
-  s_str_buf[0] = (uint16_t)((TUSB_DESC_STRING << 8) | (2 * len + 2));
-  return s_str_buf;
-}
-
-// ----------------------------------------------------------------------------
-// HID Report Descriptor callback
-// Called by TinyUSB when the host requests GET_DESCRIPTOR(Report) on the HID
-// interface. Must return the same descriptor used to size s_config_desc above.
-// ----------------------------------------------------------------------------
 uint8_t const *tud_hid_descriptor_report_cb(uint8_t instance) {
   (void)instance;
   return LAMP_ARRAY_DESCRIPTOR;
 }
 
-// ----------------------------------------------------------------------------
-// HID GET_REPORT callback
-// Windows sends Feature requests here to discover device capabilities.
-// ----------------------------------------------------------------------------
 uint16_t tud_hid_get_report_cb(uint8_t instance, uint8_t report_id,
                                 hid_report_type_t report_type,
                                 uint8_t *buffer, uint16_t reqlen) {
-  (void)instance;
-  (void)report_type;
+  (void)instance; (void)report_type;
   auto *comp = esphome::usb_lamparray::USBLampArrayComponent::instance();
   if (comp) return comp->on_get_report(report_id, buffer, reqlen);
   return 0;
 }
 
-// ----------------------------------------------------------------------------
-// HID SET_REPORT callback
-// Windows sends colour updates and mode-control commands here.
-// ----------------------------------------------------------------------------
 void tud_hid_set_report_cb(uint8_t instance, uint8_t report_id,
                             hid_report_type_t report_type,
                             const uint8_t *buffer, uint16_t buflen) {
-  (void)instance;
-  (void)report_type;
+  (void)instance; (void)report_type;
   auto *comp = esphome::usb_lamparray::USBLampArrayComponent::instance();
   if (comp) comp->on_set_report(report_id, buffer, buflen);
 }
 
-// Required stub — no action needed when an IN report completes
 void tud_hid_report_complete_cb(uint8_t instance,
                                  const uint8_t *report, uint16_t len) {
   (void)instance; (void)report; (void)len;
@@ -442,7 +379,30 @@ void USBLampArrayComponent::setup() {
 
   this->build_lamp_attributes_();
 
-  ESP_LOGI(TAG, "USB LampArray ready");
+  // Install TinyUSB with our custom HID descriptors.
+  // We do this ourselves (rather than letting ESPHome's tinyusb component do
+  // it) so we can supply the device descriptor, config descriptor with a HID
+  // interface, and string table.  The `tinyusb:` entry in fan-leds.yaml still
+  // needs to be present to pull in the headers and Kconfig options — but it
+  // must not call tinyusb_driver_install a second time.  If it does, the call
+  // will return ESP_ERR_INVALID_STATE (driver already installed) which is safe
+  // to ignore.
+  s_string_table[1] = this->manufacturer_.c_str();
+  s_string_table[2] = this->product_.c_str();
+
+  tinyusb_config_t tusb_cfg = {};
+  tusb_cfg.device_descriptor       = &s_device_desc;
+  tusb_cfg.string_descriptor       = s_string_table;
+  tusb_cfg.string_descriptor_count = 4;
+  tusb_cfg.full_speed_config       = s_config_desc;
+  tusb_cfg.self_powered            = false;
+
+  esp_err_t err = tinyusb_driver_install(&tusb_cfg);
+  if (err != ESP_OK) {
+    ESP_LOGE(TAG, "tinyusb_driver_install failed: %s", esp_err_to_name(err));
+  } else {
+    ESP_LOGI(TAG, "USB LampArray HID device ready");
+  }
 }
 
 void USBLampArrayComponent::loop() {
