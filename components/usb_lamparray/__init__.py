@@ -3,24 +3,25 @@
 Targets : ESP32-S3 (requires USB OTG peripheral + TinyUSB)
 Tested  : Waveshare ESP32-S3-Zero
 
-NOTE: This component owns ALL TinyUSB descriptor callbacks itself
-(tud_descriptor_device_cb, tud_descriptor_configuration_cb,
-tud_descriptor_string_cb).  ESPHome's built-in `tinyusb` component MUST NOT
-appear in fan-leds.yaml and MUST NOT be listed in DEPENDENCIES here — doing
-so causes duplicate-symbol linker errors and the wrong descriptors win.
+NOTE: This component owns the tinyusb_driver_install() call entirely.
+ESPHome's built-in `tinyusb` component MUST NOT appear in the YAML because:
+  1. It uses a nested-struct API (.descriptor = ...) that omits
+     configuration_descriptor, causing a fatal assert when CFG_TUD_HID > 0.
+  2. tinyusb_driver_install() has no double-install guard — a second call
+     unconditionally wipes our HID descriptors.
+We pull in the managed component (and its headers) ourselves via
+add_idf_component(), which is exactly the same call ESPHome's tinyusb
+__init__.py uses. This gets the build system to download the component and
+add its headers to the include path without instantiating the broken wrapper.
 """
 import esphome.codegen as cg
 import esphome.config_validation as cv
 from esphome.components import light
+from esphome.components.esp32 import add_idf_component, add_idf_sdkconfig_option
 from esphome.const import CONF_ID
 
-# "tinyusb" intentionally NOT listed here. ESPHome's tinyusb component uses
-# an older nested-struct API (.descriptor = ...) and passes no
-# configuration_descriptor, which causes a fatal assert when CFG_TUD_HID > 0.
-# We call tinyusb_driver_install() ourselves in setup() using the correct
-# flat-field API. The esp_tinyusb headers are available directly from the
-# ESP-IDF managed component without needing ESPHome's wrapper.
-DEPENDENCIES = ["esp32", "tinyusb"]
+# "tinyusb" intentionally NOT listed — we call add_idf_component() ourselves.
+DEPENDENCIES = ["esp32"]
 AUTO_LOAD   = []
 CODEOWNERS  = ["@SentientCustard"]
 
@@ -78,16 +79,18 @@ async def to_code(config):
     var = cg.new_Pvariable(config[CONF_ID])
     await cg.register_component(var, config)
 
-    # We need ESPHome's `tinyusb:` component present in the YAML solely to
-    # put the esp_tinyusb headers on the include path. Our component calls
-    # tinyusb_driver_install() first (higher setup priority) with the correct
-    # HID config. When ESPHome's tinyusb component then calls it, it gets
-    # ESP_ERR_INVALID_STATE (driver already installed) and marks itself failed
-    # — which is harmless as long as descriptors_control.c does not wipe our
-    # descriptors before failing.
-    # The ESP_ERR_INVALID_STATE path in tinyusb_driver_install returns before
-    # calling tinyusb_set_descriptors, so our s_desc_cfg stays intact.
-    cg.add_define("USE_TINYUSB")
+    # Pull in espressif/esp_tinyusb managed component directly.
+    # This is identical to what ESPHome's tinyusb __init__.py does, so the
+    # build system downloads the component and adds its headers to the include
+    # path — but WITHOUT instantiating ESPHome's TinyUSB wrapper class or
+    # calling tinyusb_driver_install() with the wrong arguments.
+    # ref="1.7.6~1" matches what ESPHome's own tinyusb component uses.
+    add_idf_component(name="espressif/esp_tinyusb", ref="1.7.6~1")
+
+    # Enable HID class in TinyUSB via sdkconfig
+    add_idf_sdkconfig_option("CONFIG_TINYUSB_HID_ENABLED", True)
+    add_idf_sdkconfig_option("CONFIG_TINYUSB_HID_COUNT", 1)
+    add_idf_sdkconfig_option("CONFIG_TINYUSB_CDC_ENABLED", False)
 
     cg.add(var.set_num_lamps(config[CONF_NUM_LAMPS]))
     cg.add(var.set_lamp_array_kind(LAMP_ARRAY_KINDS[config[CONF_LAMP_ARRAY_KIND]]))
