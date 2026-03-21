@@ -34,7 +34,9 @@ class USBLampArrayComponent : public Component {
   // ── YAML setters (called from __init__.py generated code) ────────────────
   void set_num_lamps(uint16_t n)           { num_lamps_ = n; }
   void set_lamp_array_kind(uint32_t kind)  { lamp_array_kind_ = kind; }
-  void set_light(light::AddressableLight *l) { light_ = l; }
+  void set_light(light::LightState *state) {
+    light_ = static_cast<light::AddressableLight *>(state->get_output());
+  }
   void set_vendor_id(uint16_t vid)         { vendor_id_ = vid; }
   void set_product_id(uint16_t pid)        { product_id_ = pid; }
   void set_manufacturer(const char *s)     { manufacturer_ = s; }
