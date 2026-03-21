@@ -4,6 +4,7 @@
 #include <cstring>
 #include <cmath>
 #include "esp_mac.h"
+#include "esp_idf_version.h"
 
 // TinyUSB — pulled in by the `tinyusb:` component in fan-leds.yaml
 // We use tinyusb_driver_install() with a custom config rather than overriding
@@ -70,6 +71,12 @@ USBLampArrayComponent *USBLampArrayComponent::instance_ = nullptr;
 #define HID_USAGE_LAMP_ID_END       0x62
 #define HID_USAGE_LAMP_ARRAY_CTRL   0x70
 #define HID_USAGE_AUTONOMOUS_MODE   0x71
+
+// LampUpdateFlags bitmask (HID Usage Tables 1.3 §26.6)
+// Bit 0: LampUpdateComplete — commit pending colours to the array now
+#ifndef LAMP_UPDATE_FLAG_COMPLETE
+#define LAMP_UPDATE_FLAG_COMPLETE  0x01
+#endif
 
 static const uint8_t LAMP_ARRAY_DESCRIPTOR[] = {
   // ---- Top-level collection: LampArray ----
@@ -394,8 +401,15 @@ void USBLampArrayComponent::setup() {
   tusb_cfg.device_descriptor       = &s_device_desc;
   tusb_cfg.string_descriptor       = s_string_table;
   tusb_cfg.string_descriptor_count = 4;
-  tusb_cfg.full_speed_config       = s_config_desc;
   tusb_cfg.self_powered            = false;
+  // Field name changed between ESP-IDF versions:
+  //   esp-idf <5.0  : full_speed_config
+  //   esp-idf >=5.0 : configuration_descriptor
+#if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 0, 0)
+  tusb_cfg.configuration_descriptor = s_config_desc;
+#else
+  tusb_cfg.full_speed_config        = s_config_desc;
+#endif
 
   esp_err_t err = tinyusb_driver_install(&tusb_cfg);
   if (err != ESP_OK) {
@@ -406,8 +420,8 @@ void USBLampArrayComponent::setup() {
 }
 
 void USBLampArrayComponent::loop() {
+  static bool autonomous_pushed_ = false;  // must be outside the if block
   if (this->autonomous_mode_) {
-    static bool autonomous_pushed_ = false;
     if (!autonomous_pushed_) {
       for (int i = 0; i < this->num_lamps_; i++) {
         this->lamp_states_[i] = {
