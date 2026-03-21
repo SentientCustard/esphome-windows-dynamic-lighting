@@ -4,7 +4,6 @@
 #include <cstring>
 #include <cmath>
 #include "esp_mac.h"
-#include "esp_idf_version.h"
 
 // TinyUSB — pulled in by the `tinyusb:` component in fan-leds.yaml
 // We use tinyusb_driver_install() with a custom config rather than overriding
@@ -283,9 +282,8 @@ static const uint8_t LAMP_ARRAY_DESCRIPTOR[] = {
 // ============================================================================
 // USB descriptor tables
 //
-// These are passed directly to tinyusb_driver_install() in setup() rather
-// than via callback overrides. ESPHome's tinyusb component owns the
-// tud_descriptor_*_cb symbols; we give our descriptors to it at install time.
+// These are used both by tinyusb_driver_install() (device + strings) and
+// by tud_descriptor_configuration_cb() (config descriptor with HID interface).
 // ============================================================================
 #define _CONFIG_TOTAL_LEN  (TUD_CONFIG_DESC_LEN + TUD_HID_DESC_LEN)
 #define _EPNUM_HID         0x81            // EP1 IN (interrupt)
@@ -331,11 +329,24 @@ static const char *s_string_table[] = {
 };
 
 // ============================================================================
-// TinyUSB C-linkage HID callbacks
-// (descriptor callbacks are handled internally by esp_tinyusb once we pass
-//  our tables to tinyusb_driver_install)
+// TinyUSB C-linkage callbacks
+//
+// tud_descriptor_configuration_cb overrides the __weak default in ESP-IDF's
+// descriptors_control.c. The default returns a CDC-only config descriptor;
+// ours returns a HID-only config with the LampArray interface wired in.
+// This is the correct way to supply a custom config descriptor in ESP-IDF 5.x
+// because tinyusb_config_t has no working field for it.
+//
+// The HID-level callbacks (get/set report, report complete) are strong symbols
+// that TinyUSB calls once the HID interface is active.
 // ============================================================================
 extern "C" {
+
+// Override weak default — supply our HID config descriptor
+uint8_t const *tud_descriptor_configuration_cb(uint8_t index) {
+  (void)index;
+  return s_config_desc;
+}
 
 uint8_t const *tud_hid_descriptor_report_cb(uint8_t instance) {
   (void)instance;
@@ -397,19 +408,16 @@ void USBLampArrayComponent::setup() {
   s_string_table[1] = this->manufacturer_.c_str();
   s_string_table[2] = this->product_.c_str();
 
+  // Pass our device descriptor and strings to tinyusb_driver_install().
+  // The configuration descriptor (which contains the HID interface) cannot
+  // be passed via tinyusb_config_t in ESP-IDF 5.x — that field exists in the
+  // docs but not in the actual header. Instead, tud_descriptor_configuration_cb
+  // below overrides the weak default and returns our HID config descriptor.
   tinyusb_config_t tusb_cfg = {};
   tusb_cfg.device_descriptor       = &s_device_desc;
   tusb_cfg.string_descriptor       = s_string_table;
   tusb_cfg.string_descriptor_count = 4;
   tusb_cfg.self_powered            = false;
-  // Field name changed between ESP-IDF versions:
-  //   esp-idf <5.0  : full_speed_config
-  //   esp-idf >=5.0 : configuration_descriptor
-#if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 0, 0)
-  tusb_cfg.configuration_descriptor = s_config_desc;
-#else
-  tusb_cfg.full_speed_config        = s_config_desc;
-#endif
 
   esp_err_t err = tinyusb_driver_install(&tusb_cfg);
   if (err != ESP_OK) {
