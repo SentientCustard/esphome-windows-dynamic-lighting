@@ -8,13 +8,12 @@ Plug it into your PC — Windows sees it as a native RGB peripheral and you can 
 
 | Item | Detail |
 |------|--------|
-| **MCU** | Waveshare ESP32-S3-Zero (or any ESP32-S3 with USB-C wired to OTG pins GPIO19/GPIO20) |
+| **MCU** | ESP32-S3-Zero (or any ESP32-S3 with USB-C wired to OTG pins GPIO19/GPIO20) |
 | **LEDs** | WS2812B (GRB order) — tested, any NeoPixel variant supported |
 | **USB** | The board's onboard USB-C port — plug directly to your PC |
 | **LED power** | 5V from PC USB header or SATA adapter; share GND with the S3-Zero |
 
 ### Wiring
-
 ```
 PC USB-C ──────────────────────────── ESP32-S3-Zero USB-C
                                                │
@@ -28,51 +27,32 @@ PC USB-C ───────────────────────�
 
 > ⚠️ **Important:** WS2812B LEDs run on 5V data logic. The S3-Zero outputs 3.3V.
 > Most modern WS2812B strips tolerate this fine. If you see flickering or wrong colours,
-> add a 74AHCT125 level shifter between GPIO2 and the LED data line.
-
-> ⚠️ **GPIO19 and GPIO20** are reserved for USB D- and D+ — do not use them for LEDs.
+> add a voltage level shifter between GPIO2 and the LED data line.
 
 > ℹ️ **GPIO21** is the onboard RGB LED on the S3-Zero. You can use this to test
 > by setting `pin: GPIO21` and `num_leds: 1` first.
 
 ## Setup
 
-### 1. Clone / download this repo
+### 1. Use the included YAML Example
 
-```bash
-git clone https://github.com/YOUR_USERNAME/esphome-usb-lamparray
-cd esphome-usb-lamparray
-```
+Have a look at / use the included YAML file fan-leds.yaml for programming the ESP32-S3 that you have in ESPHome
 
 ### 2. Create your secrets file
 
-```yaml
-# secrets.yaml (in the same directory as fan-leds.yaml)
-wifi_ssid: "YourNetwork"
-wifi_password: "YourPassword"
-ota_password: "changeme"
-api_password: "changeme"
-```
+Make sure you have your secrets defined
 
 ### 3. First flash (USB direct)
 
-The S3-Zero uses USB OTG for TinyUSB, which means the normal ESPHome serial
+The S3-Zero will use USB OTG for TinyUSB, which means the normal ESPHome serial
 flash won't work after this firmware is installed — you need to use OTA after the
 first flash.
 
-For the **very first flash**, hold the BOOT button, then connect USB to your PC.
-The board appears as a serial port. Then flash normally:
-
-```bash
-esphome run fan-leds.yaml
-```
-
-Or from the Home Assistant ESPHome add-on: add the device, paste the YAML, click Upload.
+For the **very first flash** flash using the normal ESPHome method you're happy with
 
 ### 4. OTA updates
 
-After the first flash, all subsequent updates work via Wi-Fi OTA as normal — no
-need to touch the BOOT button again.
+After the first flash, all subsequent updates work via Wi-Fi OTA as normal
 
 ### 5. Verify in Windows
 
@@ -87,15 +67,13 @@ need to touch the BOOT button again.
 ```yaml
 usb_lamparray:
   # Required
-  num_lamps: 16               # Must match your light component's num_leds
+  num_lamps: 16               # Must match your light component's num_leds - Windows ONLY reads this on first connection, so if changing this number you need to remove it from device manager and re-scan
   light_id: fan_leds          # ID of your ESPHome light component
 
   # Optional
-  lamp_array_kind: peripheral # One of: keyboard, mouse, game_controller,
-                              #   peripheral, scene, notification,
-                              #   chassis, wearable, furniture, art
-  manufacturer: "ESPHome"
-  product: "PC Fan LampArray"
+  lamp_array_kind: peripheral # One of: keyboard, mouse, game_controller, peripheral, scene, notification, chassis, wearable, furniture, art
+  manufacturer: "ESPHome"     # How things appear in Windows USB
+  product: "PC Fan LampArray" # This name appears in Dynamic Lighting
   autonomous_mode_color: [0, 0, 20]  # [R,G,B] shown when no app is controlling
   vendor_id: 0x303A           # USB Vendor ID (Espressif default)
   product_id: 0x4004          # USB Product ID
