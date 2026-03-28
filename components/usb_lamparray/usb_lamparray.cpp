@@ -423,19 +423,18 @@ void USBLampArrayComponent::setup() {
 }
 
 void USBLampArrayComponent::loop() {
-  static bool autonomous_pushed_ = false;  // must be outside the if block
+  static bool autonomous_pushed_ = false;
+
   if (this->autonomous_mode_) {
     if (!autonomous_pushed_) {
-      for (int i = 0; i < this->num_lamps_; i++) {
-        this->lamp_states_[i] = {
-          this->autonomous_r_,
-          this->autonomous_g_,
-          this->autonomous_b_
-        };
+      // Release effect lock so HA can render its own state again
+      this->release_light_();
+      if (this->light_state_) {
+        this->light_state_->publish_state();
       }
       autonomous_pushed_ = true;
-      this->dirty_ = true;
     }
+    return;
   } else {
     autonomous_pushed_ = false;
   }
@@ -448,14 +447,56 @@ void USBLampArrayComponent::loop() {
 
 void USBLampArrayComponent::flush_to_light_() {
   auto &leds = *this->light_;
+
+  // Convert Windows' raw RGB values into ESPHome's native model:
+  //   - Find the global max component across all lamps
+  //   - Set HA brightness = max/255 (so HA's multiplier restores originals)
+  //   - Scale all colours up so max component = 255
+  // This means {255,0,0} and {20,0,0} become:
+  //   max=255, brightness=1.0, colours={255,0,0} and {20,0,0} → correct
+  // And {20,0,0} and {10,0,0} become:
+  //   max=20, brightness=0.078, colours={255,0,0} and {128,0,0} → correct
+
+  // Find global max component
+  uint8_t max_val = 1;  // avoid divide by zero; min brightness = 1/255
+  for (int i = 0; i < this->num_lamps_; i++) {
+    max_val = std::max(max_val, this->lamp_states_[i].red);
+    max_val = std::max(max_val, this->lamp_states_[i].green);
+    max_val = std::max(max_val, this->lamp_states_[i].blue);
+  }
+
+  float brightness = max_val / 255.0f;
+  float scale      = 255.0f / max_val;
+
+  // Set HA brightness so its multiplier reconstructs original values
+  if (this->light_state_) {
+    auto call = this->light_state_->make_call();
+    call.set_publish(false);
+    call.set_save(false);
+    call.set_brightness(brightness);
+    call.set_transition_length(0);
+    call.perform();
+  }
+
+  // Write scaled colours — HA will multiply by brightness to get originals
+  leds.set_effect_active(true);
   for (int i = 0; i < this->num_lamps_ && i < leds.size(); i++) {
     leds[i] = Color(
-      this->lamp_states_[i].red,
-      this->lamp_states_[i].green,
-      this->lamp_states_[i].blue
+      (uint8_t)std::min(255.0f, this->lamp_states_[i].red   * scale),
+      (uint8_t)std::min(255.0f, this->lamp_states_[i].green * scale),
+      (uint8_t)std::min(255.0f, this->lamp_states_[i].blue  * scale)
     );
   }
+  for (int i = this->num_lamps_; i < leds.size(); i++) {
+    leds[i] = Color(0, 0, 0);
+  }
   leds.schedule_show();
+}
+
+void USBLampArrayComponent::release_light_() {
+  if (this->light_) {
+    this->light_->set_effect_active(false);
+  }
 }
 
 // ============================================================================
@@ -563,8 +604,11 @@ void USBLampArrayComponent::on_set_report(uint8_t report_id,
       // [1]      update_flags  uint8
       // [2..17]  lamp_ids      8x uint16 (16 bytes)
       // [18..49] colors        8x {R,G,B,I} uint8 each (32 bytes)
-      // Total: 34 bytes minimum
-      if (buf_len < 34) break;
+      // Total: always 50 bytes (fixed size regardless of lamp_count)
+      // Windows always sends 8 lamp ID slots + 8 colour slots even if count < 8
+      if (buf_len < 50) break;
+
+      ESP_LOGD(TAG, "MultiUpdate count=%d flags=0x%02X len=%d", buffer[0], buffer[1], buf_len);
 
       uint8_t count = buffer[0];
       uint8_t flags = buffer[1];
@@ -580,11 +624,12 @@ void USBLampArrayComponent::on_set_report(uint8_t report_id,
       for (uint8_t i = 0; i < count; i++) {
         uint16_t id = (uint16_t)(id_ptr[i*2] | (id_ptr[i*2+1] << 8));
         if (id >= this->num_lamps_) continue;
-        uint8_t r = color_ptr[i*4 + 0];
-        uint8_t g = color_ptr[i*4 + 1];
-        uint8_t b = color_ptr[i*4 + 2];
+        uint8_t r         = color_ptr[i*4 + 0];
+        uint8_t g         = color_ptr[i*4 + 1];
+        uint8_t b         = color_ptr[i*4 + 2];
         uint8_t intensity = color_ptr[i*4 + 3];
-        float scale = (intensity == 0) ? 0.0f : (intensity == 255) ? 1.0f : (intensity / 255.0f);
+        // Apply Windows intensity (brightness) to the colour
+        float scale = intensity / 255.0f;
         this->pending_states_[id].red   = (uint8_t)(r * scale);
         this->pending_states_[id].green = (uint8_t)(g * scale);
         this->pending_states_[id].blue  = (uint8_t)(b * scale);
@@ -620,8 +665,7 @@ void USBLampArrayComponent::on_set_report(uint8_t report_id,
       uint8_t  intensity = buffer[8];
 
       if (end >= this->num_lamps_) end = this->num_lamps_ - 1;
-      float scale = (intensity == 0) ? 0.0f : (intensity == 255) ? 1.0f : (intensity / 255.0f);
-
+      float scale = intensity / 255.0f;
       for (uint16_t i = start; i <= end; i++) {
         this->pending_states_[i].red   = (uint8_t)(r * scale);
         this->pending_states_[i].green = (uint8_t)(g * scale);
@@ -646,8 +690,18 @@ void USBLampArrayComponent::on_set_report(uint8_t report_id,
           memset(this->lamp_states_,    0, sizeof(LampState) * this->num_lamps_);
           memset(this->pending_states_, 0, sizeof(LampState) * this->num_lamps_);
           this->dirty_ = true;
+          // Force HA brightness to 1.0 so it doesn't scale our raw RGB values
+          if (this->light_state_) {
+            auto call = this->light_state_->make_call();
+            call.set_publish(false);
+            call.set_save(false);
+            call.set_brightness(1.0f);
+            call.set_transition_length(0);
+            call.perform();
+          }
         } else if (!was_autonomous && this->autonomous_mode_) {
-          ESP_LOGI(TAG, "LampArray returned to autonomous mode");
+          ESP_LOGI(TAG, "LampArray returned to autonomous mode — HA takes control");
+          // Don't clear state — loop() will hand back to HA light on next iteration
         }
       }
       break;
