@@ -26,7 +26,9 @@ class USBLampArrayComponent : public Component {
   // ── ESPHome Component lifecycle ─────────────────────────────────────────
   void setup() override;
   void loop() override;
-  float get_setup_priority() const override { return setup_priority::BUS; }
+  // Run before ESPHome's tinyusb component (which also runs at BUS priority)
+  // so we call tinyusb_driver_install first with our HID descriptors.
+  float get_setup_priority() const override { return setup_priority::BUS + 1.0f; }
 
   // ── Singleton access (used by TinyUSB C callbacks) ───────────────────────
   static USBLampArrayComponent *instance() { return instance_; }
@@ -35,6 +37,7 @@ class USBLampArrayComponent : public Component {
   void set_num_lamps(uint16_t n)           { num_lamps_ = n; }
   void set_lamp_array_kind(uint32_t kind)  { lamp_array_kind_ = kind; }
   void set_light(light::LightState *state) {
+    light_state_ = state;
     light_ = static_cast<light::AddressableLight *>(state->get_output());
   }
   void set_vendor_id(uint16_t vid)         { vendor_id_ = vid; }
@@ -59,6 +62,7 @@ class USBLampArrayComponent : public Component {
   // ── Internal helpers ─────────────────────────────────────────────────────
   void build_lamp_attributes_();
   void flush_to_light_();
+  void release_light_();
 
   // ── Singleton ────────────────────────────────────────────────────────────
   static USBLampArrayComponent *instance_;
@@ -77,7 +81,8 @@ class USBLampArrayComponent : public Component {
   uint8_t autonomous_b_ = 20;
 
   // ── Runtime state ────────────────────────────────────────────────────────
-  light::AddressableLight *light_ = nullptr;
+  light::LightState    *light_state_ = nullptr;
+  light::AddressableLight *light_    = nullptr;
 
   // Lamp attribute table — built once in setup()
   LampAttributesResponseReport lamp_attrs_[USB_LAMPARRAY_MAX_LAMPS]{};
@@ -87,10 +92,11 @@ class USBLampArrayComponent : public Component {
   LampState lamp_states_[USB_LAMPARRAY_MAX_LAMPS]{};
   LampState pending_states_[USB_LAMPARRAY_MAX_LAMPS]{};
 
-  uint16_t requested_lamp_id_ = 0;   // lamp whose attrs were last requested
-  bool     autonomous_mode_   = true; // true = device controls its own LEDs
+  uint16_t requested_lamp_id_ = 0;
+  bool     autonomous_mode_   = true;
   bool     dirty_             = false;
   bool     has_pending_       = false;
+  uint32_t last_flush_ms_     = 0;
 };
 
 }  // namespace usb_lamparray
