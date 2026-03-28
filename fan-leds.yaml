@@ -5,68 +5,60 @@
 #
 # Hardware:
 #   Board : Waveshare ESP32-S3-Zero
-#   LEDs  : WS2812B, data wire → GPIO2 (any free GPIO works; avoid 19/20 = USB)
+#   LEDs  : WS2812B, data wire → GPIO6 (any free GPIO; avoid 19/20 = USB D+/D-)
 #   USB   : The board's USB-C port connects directly to your PC
 #
-# First flash: hold BOOT button while plugging in USB, then flash via USB.
-# OTA updates: work normally once initial firmware is running.
+# NOTE: No `tinyusb:` block. ESPHome's tinyusb component has no double-install
+# guard and would wipe our HID descriptors. Include paths are injected directly
+# via build_flags in __init__.py. TinyUSB stack is pulled in by sdkconfig_options.
 # ============================================================================
 
 esphome:
   name: "esphome-s3-40"
   friendly_name: ESPHome PC Fan LEDs
   name_add_mac_suffix: false
-  # Needed so TinyUSB USB OTG is used instead of the Serial/JTAG peripheral
   platformio_options:
-    board_build.usb_mode: 1  # 1 = TinyUSB (OTG), 0 = Serial/JTAG
+    board_build.usb_mode: 1       # 1 = TinyUSB OTG, 0 = Serial/JTAG
 
 esp32:
-  board: esp32-s3-devkitm-1   # closest match for Waveshare S3-Zero in ESPHome
+  board: esp32-s3-devkitm-1
   variant: esp32s3
   framework:
     type: esp-idf
-    # TinyUSB HID support requires esp-idf framework (not Arduino)
     sdkconfig_options:
-      CONFIG_TINYUSB_ENABLED: "y"
-      CONFIG_TINYUSB_HID_ENABLED: "y"
-      CONFIG_TINYUSB_DESC_MANUFACTURER_STRING: "ESPHome"
-      CONFIG_TINYUSB_DESC_PRODUCT_STRING: "USB LampArray"
-      CONFIG_TINYUSB_DESC_USE_ESPRESSIF_VID: "n"
-      CONFIG_TINYUSB_DESC_CUSTOM_VID: "0x303A"
-      CONFIG_TINYUSB_DESC_CUSTOM_PID: "0x4004"
-      # Disable USB Serial/JTAG so OTG has full control
+      # TinyUSB is enabled via add_idf_component in usb_lamparray/__init__.py
       CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG: "n"
       CONFIG_ESP_CONSOLE_UART_DEFAULT: "y"
 
-# Time component for Home Assistant
+# ── Home Assistant integration ───────────────────────────────────────────────
 time:
   - platform: homeassistant
     id: homeassistant_time
 
-# Enable logging
-logger:
-  # Use hardware UART for logs (GPIO43=TX, GPIO44=RX on S3-Zero)
-  # This frees up USB for HID — connect a USB-UART adapter if you need logs
-  hardware_uart: UART0
-  baud_rate: 115200
-
-# Enable Home Assistant API
 api:
   encryption:
     key: !secret api_encryption_key
 
-# Allow Over-The-Air updates
 ota:
-- platform: esphome
+  - platform: esphome
 
 wifi:
   ssid: !secret wifi_ssid
   password: !secret wifi_password
-  ap:
-    ssid: "Fan-Leds Fallback"
-    password: "fanledsfallback"
 
+# ── Lights ───────────────────────────────────────────────────────────────────
 light:
+  - platform: esp32_rmt_led_strip
+    id: fan_leds
+    name: "PC Fan LEDs"
+    rgb_order: GRB
+    pin: 6
+    num_leds: 16
+    chipset: WS2812
+    restore_mode: RESTORE_DEFAULT_ON
+    default_transition_length: 0.08s
+    gamma_correct: 1
+    rmt_symbols: 128
   - platform: esp32_rmt_led_strip
     id: onboardLED
     name: "Onboard LED"
@@ -75,57 +67,23 @@ light:
     pin: 21
     chipset: WS2812
     restore_mode: RESTORE_DEFAULT_ON
-    default_transition_length: 0s
-    gamma_correct: 1.5
-  - platform: esp32_rmt_led_strip
-    id: fan_leds
-    name: "PC Fan LEDs"
-    rgb_order: GRB
-    pin: GPIO2
-    num_leds: 16
-    chipset: WS2812
-    restore_mode: ALWAYS_OFF
-    default_transition_length: 0s
-    gamma_correct: 1.5
+    default_transition_length: 0.08s
+    gamma_correct: 1
+    rmt_symbols: 64
 
-sensor:
-  - platform: wifi_signal
-    name: "WiFi Signal Strength"
-    id: wifi_signal_db
-    update_interval: 5s
-
-tinyusb:
-  usb_product_id: 0x4004
-  usb_manufacturer_str: "ESPHome"
-  usb_product_str: "PC Fan LampArray"
-#  hid: true
-
-# ---- External component ----
+# ── External component ───────────────────────────────────────────────────────
 external_components:
   - source:
       type: git
       url: https://github.com/SentientCustard/esphome-windows-dynamic-lighting/
-      ref: 04878b5
     components: [usb_lamparray]
 
-# ---- USB HID LampArray ----
+# ── USB HID LampArray ────────────────────────────────────────────────────────
 usb_lamparray:
-  num_lamps: 1
-  lamp_array_kind: peripheral
-  light_id: onboardLED
   manufacturer: "ESPHome"
   product: "PC Fan LampArray"
-  autonomous_mode_color: [0, 255, 0]  # bright green
-
-
-#  num_lamps: 16               # Must match light.num_leds above
-#  lamp_array_kind: peripheral # Options: keyboard, mouse, peripheral, chassis, etc.
-#  light_id: fan_leds
-#  manufacturer: "ESPHome"
-#  product: "PC Fan LampArray"
-  # Colour shown when no Windows app is actively controlling the device
-  # [R, G, B] — this faint blue is a nice "idle" colour
-#  autonomous_mode_color: [0, 0, 20]
-  # Optional: change USB VID/PID if you have multiple devices
-  # vendor_id: 0x303A
-  # product_id: 0x4004
+  lamp_array_kind: peripheral
+  num_lamps: 16 #Any change to this number requires deleting and re-scanning the device in Device Manager, Windows only checks this on first connection
+  light_id: fan_leds
+#  num_lamps: 1 # for testing with the onboard LED
+#  light_id: onboardLED # for testing with the onboard LED
